@@ -93,21 +93,24 @@ async def resolve_error(
     solution = await summarize_stackoverflow_documents(
         error_message,
         documents,
-        question_summarizer,
-        answer_summarizer,
-        solution_summarizer,
-        solution_aggregator,
+        answer_summarizer=answer_summarizer,
+        solution_summarizer=solution_summarizer,
+        solution_aggregator=solution_aggregator,
+        question_summarizer=question_summarizer
     )
     _log.info(f"Solution: {solution}")
     return solution
 
 
-def app(error_message: str):
+def app(
+    error_message: str = typer.Argument(..., help="The error message to search for in StackOverflow."),
+    model_name: str = typer.Option("gpt-3.5-turbo", help="The model name to use."),
+):
     _log.info(f"Searching for '{error_message}' in StackOverflow...")
 
     cache = DocumentsPersistentCache.from_config(".cache")
 
-    llm = ChatOpenAI(model_name="gpt-3.5-turbo")
+    llm = ChatOpenAI(model_name=model_name)
     question_summarizer = StackOverflowQuestionSummarizer(llm)
     answer_summarizer = StackOverflowAnswerSummarizer(llm)
     solution_summarizer = StackoverflowDocumentSolutionSummarizer(llm)
@@ -123,6 +126,7 @@ def app(error_message: str):
             solution_summarizer=solution_summarizer,
             solution_aggregator=solution_aggregator,
             cache=cache,
+            top_k_pages=3
         )
     )
     elapsed = time.perf_counter() - s
@@ -132,7 +136,8 @@ def app(error_message: str):
 if __name__ == "__main__":
     """
         Usage: python demo_async.py <error_message>
-        For example: python demo_async.py "IndentationError: expected an indented block"
+        Examples: python demo_async.py "IndentationError: expected an indented block"
+                  python demo_async.py "IndentationError: expected an indented block" --model-name "gpt-4-0125-preview"  
     """
     pretty_logging.setup("INFO")
     typer.run(app)

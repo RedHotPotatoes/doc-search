@@ -11,9 +11,6 @@ from core.formatters.stackoverflow import (format_stackoverflow_answer,
 from core.stackoverflow import (StackOverflowAnswer, StackOverflowDocument,
                                 StackOverflowQuestion)
 
-AnswerProcessingType = StackOverflowAnswer | Dict[str, Any]
-AggregateAnswersType = List[StackOverflowAnswer] | List[str]
-
 
 class Summarizer:
     _template = ""
@@ -83,13 +80,13 @@ class StackOverflowAnswerSummarizer(Summarizer):
     )
     _input_variables = ["question_prefix", "answer_text"]
 
-    def _preprocess_input(self, inputs: AnswerProcessingType) -> str:
-        answer, question = None, None
+    def _preprocess_input(self, inputs: StackOverflowAnswer | Dict[str, Any]) -> str:
         if isinstance(inputs, StackOverflowAnswer):
+            question = None
             answer = inputs
-        elif isinstance(inputs, Dict):
+        else:
             answer = inputs.get("answer")
-            question = inputs.get("question")
+            question = inputs.get("question", None)
         answer_text = format_stackoverflow_answer(answer)
         prefix = ""
         if question is not None:
@@ -156,12 +153,16 @@ class DocumentsSolutionAggregator(Summarizer):
 async def summarize_stackoverflow_document(
     error_message: str,
     document: StackOverflowDocument,
-    question_summarizer: Summarizer,
     answer_summarizer: Summarizer,
     solution_summarizer: Summarizer,
+    question_summarizer: Summarizer | None = None,
 ):
-    # question_summary = await question_summarizer.async_summarize(document.question)
-    answers_summary = await answer_summarizer.async_summarize_multiple(document.answers)
+    if question_summarizer is not None:
+        question_summary = await question_summarizer.async_summarize(document.question)
+        answers = [{"question": question_summary, "answer": answer} for answer in document.answers]
+    else:
+        answers = document.answers
+    answers_summary = await answer_summarizer.async_summarize_multiple(answers)
     summary = await solution_summarizer.async_summarize(
         {"error_message": error_message, "answers": answers_summary}
     )
@@ -171,10 +172,10 @@ async def summarize_stackoverflow_document(
 async def summarize_stackoverflow_documents(
     error_message: str,
     documents: List[StackOverflowDocument],
-    question_summarizer: Summarizer,
     answer_summarizer: Summarizer,
     solution_summarizer: Summarizer,
     solution_aggregator: Summarizer,
+    question_summarizer: Summarizer | None = None,
 ):
     def preproc_summary(summary):
         summary = summary.split("\n")
@@ -186,9 +187,9 @@ async def summarize_stackoverflow_documents(
             summarize_stackoverflow_document(
                 error_message,
                 document,
-                question_summarizer,
                 answer_summarizer,
                 solution_summarizer,
+                question_summarizer,
             )
             for document in documents
         ]
