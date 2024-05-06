@@ -2,7 +2,7 @@ import logging
 import pprint
 from dataclasses import asdict
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 import pretty_logging
 import requests
@@ -18,39 +18,13 @@ _log = logging.getLogger(Path(__file__).stem)
 
 
 def parse_stackoverflow_question_page(
-    html_path: str,
+    html: str,
 ) -> StackOverflowDocument:
-    with open(html_path, "r") as file:
-        html = file.read()
     soup = BeautifulSoup(html, "html.parser")
     title = parse_title(soup)
     question = parse_question(soup)
     answers = parse_answers(soup)
     return StackOverflowDocument(title=title, question=question, answers=answers)
-
-
-def parse_stackoverflow_question_page_from_url(
-    url: str,
-) -> Tuple[StackOverflowDocument | None, HttpStatusCode]:
-    message = "Parser does not support interaction with the browser, "
-    "the parsed data could be incomplete (e.g. non-unfolded comments). "
-    "Parse html page with libraries such as selenium or playwright and, then "
-    "use parse_stackoverflow_question_page instead to get the full data."
-    _log.info(message)
-
-    response = requests.get(url)
-    status_code = HttpStatusCode(response.status_code)
-    if status_code != HttpStatusCode.OK:
-        return None, status_code
-
-    soup = BeautifulSoup(response.content, "html.parser")
-    title = parse_title(soup)
-    question = parse_question(soup)
-    answers = parse_answers(soup)
-    return (
-        StackOverflowDocument(title=title, question=question, answers=answers),
-        status_code,
-    )
 
 
 def parse_title(soup: BeautifulSoup) -> str:
@@ -199,10 +173,12 @@ if __name__ == "__main__":
     pretty_logging.setup(logging.INFO)
 
     url = "https://stackoverflow.com/questions/11227809/why-is-processing-a-sorted-array-faster-than-an-unsorted-arrays"
-    doc, status_code = parse_stackoverflow_question_page_from_url(url)
-    if status_code == HttpStatusCode.OK:
-        parsed_doc = pprint.pformat(asdict(doc))
-        _log.info(f"\n{parsed_doc}")
-    else:
+    response = requests.get(url)
+    status_code = HttpStatusCode(response.status_code)
+    if status_code != HttpStatusCode.OK:
         _log.warning(f"Failed to fetch data from {url}")
         _log.warning(f"Status code: {status_code}")
+    else:
+        doc = parse_stackoverflow_question_page(response.content)
+        parsed_doc = pprint.pformat(asdict(doc))
+        _log.info(f"\n{parsed_doc}")
