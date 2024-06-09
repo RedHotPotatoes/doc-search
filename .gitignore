@@ -1,6 +1,12 @@
 # MacOS
 .DS_Store
 
+# Code editors and IDEs
+.vscode/
+
+# Playground
+misc/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
