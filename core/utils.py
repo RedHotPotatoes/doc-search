@@ -2,11 +2,11 @@ import requests
 
 
 def search_stackoverflow(query):
-    url = "https://api.stackexchange.com/2.2/search"
+    url = "https://api.stackexchange.com/2.3/search/advanced"
     params = {
         "order": "desc",
         "sort": "relevance",
-        "intitle": query,
+        "q": query,
         "site": "stackoverflow",
     }
     response = requests.get(url, params=params).json()
