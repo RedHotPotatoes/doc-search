@@ -1,3 +1,10 @@
+# Data volumes 
+mongodb-data 
+mongodb-log
+
+# Credentials
+.env
+
 # MacOS
 .DS_Store
 
