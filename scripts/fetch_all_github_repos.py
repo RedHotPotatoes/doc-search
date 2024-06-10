@@ -51,6 +51,10 @@ class MongoDB:
 
 @with_logger
 class FirstLimitRateMixin:
+    def __init__(self):
+        self._queries_remaining = 0
+        self._reset_timestemp = 0
+
     def apply_first_rate_limit(self, response: Response, time_delta: float = 0.0) -> None:
         self._update_first_rate_limit(response)
         if self.is_first_rate_limit_exceeded:
@@ -177,3 +181,5 @@ if __name__ == "__main__":
     pretty_logging.setup("INFO")
     fetcher = GitHubReposFetcher("db.json")
     fetcher.fetch_repos()
+
+
