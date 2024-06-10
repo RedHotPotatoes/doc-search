@@ -1,0 +1,49 @@
+services:
+  app:
+    build: .
+    image: app
+    container_name: app
+    depends_on:
+      - mongodb
+    networks:
+      - app-network
+    volumes:
+      - .:/app
+    environment:
+      MONGODB_HOST: mongodb 
+      MONGODB_ADMIN_USER: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGODB_ADMIN_PASS: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGODB_PORT: 27017
+    ports:
+      - "5009:5009"
+
+  mongodb:
+    image: mongo:7.0.0
+    container_name: mongodb
+    hostname: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./mongodb/initdb.d/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+      - ./mongodb-data/data:/data/db/
+      - ./mongodb-log:/var/log/mongodb/
+    networks:
+      - app-network
+    env_file:
+      - .env 
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    
+volumes:
+  mongodb-data:
+    driver: local
+    name: mongodb-data
+  mongodb-log:
+    driver: local
+    name: mongodb-log
+
+networks:
+  app-network:
+    driver: bridge
+    name: app-network

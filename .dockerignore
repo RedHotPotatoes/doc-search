@@ -1,0 +1,11 @@
+mongodb
+mongodb-data
+mongodb-log
+
+misc
+
+.vscode
+.cache
+
+*.egg-info
+__pycache__
