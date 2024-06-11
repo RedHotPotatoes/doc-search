@@ -55,7 +55,7 @@ class GitHubReposFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
             insert_data = [
                 {key: repo[key] for key in self._parse_keys} for repo in data
             ]
-            self._db.insert_bulk(insert_data)
+            self._db.update_bulk(insert_data, upsert=True)
         except Exception as e:
             self._log.error(f"Error occured during writing data into db: {e}")
             self._log.error(f"Response: {response.text}")

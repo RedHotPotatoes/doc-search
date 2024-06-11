@@ -1,5 +1,6 @@
 db = db.getSiblingDB("github_crawl");
 db.createCollection("repositories");
+db.repositories.createIndex({ full_name: 1 }, { unique: true });
 db.repositories.insertMany([
     {
         "id": -1,

@@ -11,6 +11,10 @@ class Database(Protocol):
 
     def insert_bulk(self, data: dict[str, Any]) -> None: ...
 
+    def update(self, key: str, value: Any) -> None: ...
+
+    def update_bulk(self, data: dict[str, Any]) -> None: ...
+
 
 @with_logger
 class MongoDB:
@@ -56,6 +60,27 @@ class MongoDB:
     ) -> None:
         collection = self._get_collection(database, collection)
         collection.insert_many(data)
+
+    def update(
+        self,
+        key: str,
+        data: Dict[str, Any],
+        database: str | None = None,
+        collection: str | None = None,
+        upsert: bool = False,
+    ) -> None:
+        collection = self._get_collection(database, collection)
+        collection.update_one(data, upsert=upsert)
+
+    def update_bulk(
+        self,
+        data: List[Dict[str, Any]],
+        database: str | None = None,
+        collection: str | None = None,
+        upsert: bool = False,
+    ) -> None:
+        collection = self._get_collection(database, collection)
+        collection.update_many(data, upsert=upsert)
 
     def _get_collection(
         self, database: str | None = None, collection: str | None = None
