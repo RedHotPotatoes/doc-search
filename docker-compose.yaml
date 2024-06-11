@@ -8,11 +8,14 @@ services:
       - app-network
     volumes:
       - .:/app
+    env_file:
+      - .env
     environment:
       MONGODB_HOST: mongodb 
       MONGODB_ADMIN_USER: ${MONGO_INITDB_ROOT_USERNAME}
       MONGODB_ADMIN_PASS: ${MONGO_INITDB_ROOT_PASSWORD}
       MONGODB_PORT: 27017
+      GITHUB_TOKEN: ${AUTH_GITHUB_TOKEN}
     ports:
       - "5009:5009"
 

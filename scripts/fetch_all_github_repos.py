@@ -41,9 +41,15 @@ class GitHubReposFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
         # The only limit that we theoretically can violate is the number of points per minute:
         self.apply_points_rate_limit(request_types, time_delta=2.0)
 
-    def fetch_repos(self):
+    def fetch_repos(self, github_token: str = None):
         self._log.info("Fetching all GitHub repositories...")
-        response = requests.get(self.URL, params=self.PARAMS)
+        headers = {
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Accept": "application/vnd.github.v3+json",
+        }
+        if github_token is not None:
+            headers["Authorization"] = f"Bearer {github_token}"
+        response = requests.get(self.URL, headers=headers, params=self.PARAMS, )
         self._check_rate_limits(response, ["get"])
         self._log.info(
             f"First rate limit: {self._queries_remaining} queries remaining."
@@ -58,8 +64,11 @@ class GitHubReposFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
                 return
             url = response.links["next"]["url"]
             self._log.info(f"Fetching next page: {url}")
-            response = requests.get(url)
+            response = requests.get(url, headers=headers)
             self._check_rate_limits(response, ["get"])
+            self._log.info(
+                f"First rate limit: {self._queries_remaining} queries remaining."
+            )
             try: 
                 data = response.json()
                 self._update_data(data)
@@ -78,6 +87,8 @@ if __name__ == "__main__":
 
     mongo_host = os.getenv("MONGODB_HOST", "mongodb")
     mongo_port = os.getenv("MONGODB_PORT", 27017)
+    github_token = os.getenv("GITHUB_TOKEN", None)
+
     host = f"mongodb://{mongo_host}:{mongo_port}/"
     db = MongoDB(
         host,
@@ -87,4 +98,4 @@ if __name__ == "__main__":
         password=os.getenv("MONGODB_ADMIN_PASS"),
     )
     fetcher = GitHubReposFetcher(db)
-    fetcher.fetch_repos()
+    fetcher.fetch_repos(github_token)
