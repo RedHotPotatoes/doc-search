@@ -36,8 +36,8 @@ class FirstLimitRateMixin:
             time.sleep(time_to_wait + time_delta)
 
     def _update_first_rate_limit(self, response: Response) -> None:
-        self._queries_remaining = response.headers["X-RateLimit-Remaining"]
-        self._reset_timestemp = response.headers["X-RateLimit-Reset"]
+        self._queries_remaining = int(response.headers["X-RateLimit-Remaining"])
+        self._reset_timestemp = int(response.headers["X-RateLimit-Reset"])
 
     @property
     def is_first_rate_limit_exceeded(self) -> bool:
