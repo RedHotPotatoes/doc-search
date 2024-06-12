@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Protocol
 
 from pretty_logging import with_logger
-from pymongo import MongoClient
+from pymongo import MongoClient, UpdateOne
 
 
 class Database(Protocol):
@@ -63,24 +63,35 @@ class MongoDB:
 
     def update(
         self,
-        key: str,
+        update_key: str,
         data: Dict[str, Any],
         database: str | None = None,
         collection: str | None = None,
         upsert: bool = False,
     ) -> None:
         collection = self._get_collection(database, collection)
-        collection.update_one(data, upsert=upsert)
+        collection.update_one({update_key: data[update_key]}, {"$set": data}, upsert=upsert)
 
     def update_bulk(
         self,
+        update_key: str,
         data: List[Dict[str, Any]],
         database: str | None = None,
         collection: str | None = None,
         upsert: bool = False,
     ) -> None:
         collection = self._get_collection(database, collection)
-        collection.update_many(data, upsert=upsert)
+        
+        operations = []
+        for entry in data:
+            operations.append(
+                UpdateOne(
+                    {update_key: entry[update_key]},
+                    {"$set": entry},
+                    upsert=upsert,
+                )
+            )
+        collection.bulk_write(operations)
 
     def _get_collection(
         self, database: str | None = None, collection: str | None = None

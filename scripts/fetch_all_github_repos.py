@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import pretty_logging
 import requests
@@ -10,6 +10,7 @@ from requests import Response
 
 from core.db import Database, MongoDB
 from core.rate_limits.github import FirstLimitRateMixin, PointsRateLimitMixin
+from core.status_codes import HttpStatusCode
 
 handler = logging.FileHandler("fetch_all_github_repos.log")
 logging.basicConfig(
@@ -24,6 +25,7 @@ class GitHubReposFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
     URL = "https://api.github.com/repositories"
     PARAMS = {"q": "is:public", "per_page": 100, "page": 1}
     PARSE_KEYS = ["id", "name", "full_name", "private", "html_url", "fork", "url"]
+    INDEX_KEY = "full_name"
 
     def __init__(
         self,
@@ -49,16 +51,14 @@ class GitHubReposFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
         # The only limit that we theoretically can violate is the number of points per minute:
         self.apply_points_rate_limit(request_types, time_delta=2.0)
 
-    def _update_db_with_reponse_data(self, response: Response):
-        data = response.json()
-        try:
-            insert_data = [
-                {key: repo[key] for key in self._parse_keys} for repo in data
-            ]
-            self._db.update_bulk(insert_data, upsert=True)
-        except Exception as e:
-            self._log.error(f"Error occured during writing data into db: {e}")
-            self._log.error(f"Response: {response.text}")
+    def _update_db_with_response_data(self, data: List[Dict[str, Any]]):
+        insert_data = [{key: repo[key] for key in self._parse_keys} for repo in data]
+        self._db.update_bulk(self.INDEX_KEY, insert_data, upsert=True)
+
+    def _validate_response_data(self, data: List[Dict[str, Any]]):
+        for repo in data:
+            if not all(key in repo for key in self._parse_keys):
+                raise ValueError("Invalid response data.")
 
     def _get_request(
         self,
@@ -70,8 +70,19 @@ class GitHubReposFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
         while retry_count < self._max_retries:
             try:
                 response = requests.get(url, headers=headers, params=params)
+                if int(response.status_code) != HttpStatusCode.OK.value:
+                    self._log.error(
+                        f"Failed to fetch url: {url}. Status code: {response.status_code}."
+                    )
+                    if int(response.status_code) == HttpStatusCode.FORBIDDEN.value:
+                        self._log.error(f"Forbidden. Reason: {response.reason}.")
+                        self._check_rate_limits(response, ["get"])
+                    raise Exception("Bad status code.")
+
+                data = response.json()
+                self._validate_response_data(data)
                 break
-            except ConnectionError as e:
+            except Exception as e:
                 self._log.error(f"Error occured during fetching data: {e}")
                 self._log.info(f"Retrying... {retry_count + 1}/{self._max_retries}")
                 self._log.info(f"Retrying in {self._retry_delay} seconds.")
@@ -83,7 +94,7 @@ class GitHubReposFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
                 f"Failed to fetch url: {url} after {self._max_retries} retries."
             )
             return
-        return response
+        return response, data
 
     def fetch_repos(self, github_token: str = None, verbose: bool = True):
         self._log.info("Fetching all GitHub repositories...")
@@ -94,11 +105,12 @@ class GitHubReposFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
         if github_token is not None:
             headers["Authorization"] = f"Bearer {github_token}"
 
-        response = self._get_request(self.URL, params=self.PARAMS, headers=headers)
+        response = self._get_request(self.URL, headers=headers, params=self.PARAMS)
         if response is None:
             self._log.info("Failed to fetch the first page.")
             return
-        self._update_db_with_reponse_data(response)
+        response, data = response
+        self._update_db_with_response_data(data)
         self._check_rate_limits(response, ["get"])
         self._log.info(
             f"First rate limit: {self._queries_remaining} queries remaining."
@@ -107,16 +119,20 @@ class GitHubReposFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
         page_counter = 1
         while True:
             if "next" not in response.links:
-                self._log.info(f"Finished fetching github repositories. Total pages: {page_counter}.")
+                self._log.info(
+                    f"Finished fetching github repositories. Total pages: {page_counter}."
+                )
                 return
             url = response.links["next"]["url"]
+
             response = self._get_request(url, headers=headers)
             if response is None:
                 self._log.info(
                     f"Failed to fetch page {page_counter}, url: {url}. Stop fetching."
                 )
                 return
-            self._update_db_with_reponse_data(response)
+            response, data = response
+            self._update_db_with_response_data(data)
             self._check_rate_limits(response, ["get"])
 
             page_counter += 1
