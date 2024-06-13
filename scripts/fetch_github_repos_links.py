@@ -21,7 +21,7 @@ logging.basicConfig(
 
 
 @with_logger
-class GitHubReposFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
+class GitHubReposLinkFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
     URL = "https://api.github.com/repositories"
     PARAMS = {"q": "is:public", "per_page": 100, "page": 1}
     PARSE_KEYS = ["id", "name", "full_name", "private", "html_url", "fork", "url"]
@@ -158,5 +158,5 @@ if __name__ == "__main__":
         username=os.getenv("MONGODB_ADMIN_USER"),
         password=os.getenv("MONGODB_ADMIN_PASS"),
     )
-    fetcher = GitHubReposFetcher(db)
+    fetcher = GitHubReposLinkFetcher(db)
     fetcher.fetch_repos(github_token)
