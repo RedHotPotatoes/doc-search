@@ -10,6 +10,7 @@ from requests import Response
 
 from core.db import Database, MongoDB
 from core.rate_limits.github import FirstLimitRateMixin, PointsRateLimitMixin
+from core.safe_requests import GetRequestMixin
 from core.status_codes import HttpStatusCode
 
 handler = logging.FileHandler("fetch_all_github_repos.log")
@@ -21,7 +22,7 @@ logging.basicConfig(
 
 
 @with_logger
-class GitHubReposLinkFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
+class GitHubReposLinkFetcher(FirstLimitRateMixin, PointsRateLimitMixin, GetRequestMixin):
     URL = "https://api.github.com/repositories"
     PARAMS = {"q": "is:public", "per_page": 100, "page": 1}
     PARSE_KEYS = ["id", "name", "full_name", "private", "html_url", "fork", "url"]
@@ -60,40 +61,23 @@ class GitHubReposLinkFetcher(FirstLimitRateMixin, PointsRateLimitMixin):
             if not all(key in repo for key in self._parse_keys):
                 raise ValueError("Invalid response data.")
 
-    def _get_request(
+    def _handle_response(
         self,
-        url: str,
+        response: Response,
+        url: str | None,
         headers: Dict[str, str] | None,
-        params: Dict[str, str] | None = None,
-    ):
-        retry_count = 0
-        while retry_count < self._max_retries:
-            try:
-                response = requests.get(url, headers=headers, params=params)
-                if int(response.status_code) != HttpStatusCode.OK.value:
-                    self._log.error(
-                        f"Failed to fetch url: {url}. Status code: {response.status_code}."
-                    )
-                    if int(response.status_code) == HttpStatusCode.FORBIDDEN.value:
-                        self._log.error(f"Forbidden. Reason: {response.reason}.")
-                        self._check_rate_limits(response, ["get"])
-                    raise Exception("Bad status code.")
-
-                data = response.json()
-                self._validate_response_data(data)
-                break
-            except Exception as e:
-                self._log.error(f"Error occured during fetching data: {e}")
-                self._log.info(f"Retrying... {retry_count + 1}/{self._max_retries}")
-                self._log.info(f"Retrying in {self._retry_delay} seconds.")
-
-                retry_count += 1
-                time.sleep(self._retry_delay)
-        else:
+        params: Dict[str, str] | None,
+    ) -> Any:
+        if int(response.status_code) != HttpStatusCode.OK.value:
             self._log.error(
-                f"Failed to fetch url: {url} after {self._max_retries} retries."
+                f"Failed to fetch url: {url}. Status code: {response.status_code}."
             )
-            return
+            if int(response.status_code) == HttpStatusCode.FORBIDDEN.value:
+                self._log.error(f"Forbidden. Reason: {response.reason}.")
+                self._check_rate_limits(response, ["get"])
+            raise Exception("Bad status code.")
+        data = response.json()
+        self._validate_response_data(data)
         return response, data
 
     def fetch_repos(self, github_token: str = None, verbose: bool = True):
