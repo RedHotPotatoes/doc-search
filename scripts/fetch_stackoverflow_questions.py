@@ -250,8 +250,10 @@ class StackOverflowQuestionsFetcher:
         cur_time = time.time()
         wait_times = []
         for worker in self._workers:
-            w_time = max(worker.restart_time or 0, worker.backoff_end_time or 0) - cur_time
-            w_time = max(w_time, 0)
+            if worker.quota_remaining == 0:
+                w_time = max(0, worker.restart_time - cur_time, worker.backoff_end_time or 0 - cur_time)
+            else:
+                w_time = max(0, worker.backoff_end_time or 0 - cur_time)
             wait_times.append(w_time)
         
         wait_time = min(wait_times)
