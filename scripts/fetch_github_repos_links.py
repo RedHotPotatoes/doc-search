@@ -10,7 +10,7 @@ from requests import Response
 
 from core.db import Database, MongoDB
 from core.rate_limits.github import FirstLimitRateMixin, PointsRateLimitMixin
-from core.safe_requests import GetRequestMixin
+from core.safe_requests import SafeRequestMixin
 from core.status_codes import HttpStatusCode
 
 handler = logging.FileHandler("fetch_all_github_repos.log")
@@ -22,7 +22,7 @@ logging.basicConfig(
 
 
 @with_logger
-class GitHubReposLinkFetcher(FirstLimitRateMixin, PointsRateLimitMixin, GetRequestMixin):
+class GitHubReposLinkFetcher(FirstLimitRateMixin, PointsRateLimitMixin, SafeRequestMixin):
     URL = "https://api.github.com/repositories"
     PARAMS = {"q": "is:public", "per_page": 100, "page": 1}
     PARSE_KEYS = ["id", "name", "full_name", "private", "html_url", "fork", "url"]
@@ -61,7 +61,7 @@ class GitHubReposLinkFetcher(FirstLimitRateMixin, PointsRateLimitMixin, GetReque
             if not all(key in repo for key in self._parse_keys):
                 raise ValueError("Invalid response data.")
 
-    def _handle_response(
+    def _handle_get_response(
         self,
         response: Response,
         url: str | None,
