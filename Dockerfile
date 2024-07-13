@@ -1,18 +1,14 @@
-# create basic python container on alpine
-FROM python:3.11.3-alpine
+FROM python:3.11.9-slim
 
-# set working directory
 WORKDIR /app
 
-# copy the project directory into the container
 COPY . /app
 
-# install git and bash
-RUN apk add git
-RUN apk add bash
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && apt-get purge -y --auto-remove \
+    && rm -rf /var/lib/apt/lists/*
 
-# install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install -e .
 
 CMD ["python", "app.py"]

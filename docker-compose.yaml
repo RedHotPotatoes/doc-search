@@ -1,7 +1,7 @@
 services:
   app:
     build: .
-    container_name: app
+    container_name: search-app
     depends_on:
       - mongodb
     networks:
@@ -19,11 +19,6 @@ services:
 
       # github
       GITHUB_TOKEN: ${AUTH_GITHUB_TOKEN}
-
-      # stackoverflow
-      STACKOVERFLOW_APP_KEY1: ${STACKOVERFLOW_APP_KEY1}
-      STACKOVERFLOW_APP_KEY2: ${STACKOVERFLOW_APP_KEY2}
-      STACKOVERFLOW_APP_KEY3: ${STACKOVERFLOW_APP_KEY3}
 
       # proxy
       PROXY_USER: ${PROXY_USER}

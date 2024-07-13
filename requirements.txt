@@ -4,7 +4,9 @@ langchain==0.1.14
 langchain-core==0.1.42
 langchain-openai==0.1.1
 langchain-community==0.0.32
+lxml==5.1.1
 pymongo==4.7.3
 python-dotenv==1.0.1
+qdrant-client[fastembed]>=1.8.2
 typer==0.12.1
 git+https://github.com/zurk/pretty_logging@a0010b663ee590a73dd75df4e96c307adabf1190
