@@ -10,7 +10,7 @@ import requests
 from pretty_logging import with_logger
 
 from core.db import Database, MongoDB
-from core.safe_requests import GetRequestMixin
+from core.safe_requests import SafeRequestMixin
 from core.status_codes import HttpStatusCode
 
 handler = logging.FileHandler("fetch_all_stackoverflow_question.log")
@@ -25,7 +25,7 @@ EXTRA_WAIT_TIME_IN_SEC = 10.0
 BACKOFF_EXTRA_WAIT_TIME_IN_SEC = 2.0
 
 @with_logger
-class Worker(GetRequestMixin):
+class Worker(SafeRequestMixin):
     def __init__(
         self, 
         app_key: str | None = None, 
@@ -91,7 +91,7 @@ class Worker(GetRequestMixin):
         self._quota_remaining = meta["quota_remaining"]
         return response, data, meta
 
-    def _handle_response(
+    def _handle_get_response(
         self,
         response: requests.Response,
         url: str | None,

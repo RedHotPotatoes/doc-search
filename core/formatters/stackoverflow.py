@@ -1,4 +1,4 @@
-from core.stackoverflow import (CodeBlock, Comment, Data, Image, Lists,
+from core.data_structures import (CodeBlock, Comment, Data, Image, Lists,
                                         PlainText, StackOverflowAnswer,
                                         StackOverflowDocument,
                                         StackOverflowQuestion, Table)

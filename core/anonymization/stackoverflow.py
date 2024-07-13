@@ -1,4 +1,4 @@
-from core.stackoverflow import StackOverflowDocument
+from core.data_structures import StackOverflowDocument
 
 
 def _get_username_mapping(document: StackOverflowDocument) -> dict[str, str]:

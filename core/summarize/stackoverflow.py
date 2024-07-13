@@ -8,7 +8,7 @@ from langchain.prompts import ChatPromptTemplate
 
 from core.formatters.stackoverflow import (format_stackoverflow_answer,
                                            format_stackoverflow_question)
-from core.stackoverflow import (StackOverflowAnswer, StackOverflowDocument,
+from core.data_structures import (StackOverflowAnswer, StackOverflowDocument,
                                 StackOverflowQuestion)
 
 

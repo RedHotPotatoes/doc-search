@@ -8,7 +8,7 @@ import pretty_logging
 import requests
 from bs4 import BeautifulSoup, NavigableString, Tag
 
-from core.stackoverflow import (CodeBlock, Comment, Data, Image, Lists,
+from core.data_structures import (CodeBlock, Comment, Data, Image, Lists,
                                 PlainText, StackOverflowAnswer,
                                 StackOverflowDocument, StackOverflowQuestion,
                                 Table)
