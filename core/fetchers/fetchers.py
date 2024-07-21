@@ -3,7 +3,7 @@ from typing import Any
 
 import aiohttp
 from markdownify import markdownify
-from qdrant_client import QdrantClient, models
+from qdrant_client import AsyncQdrantClient, models
 from requests import Response
 
 from core.safe_requests_async import SafeRequestMixin
@@ -25,17 +25,18 @@ class StackOverflowFetcher(FetcherAsync):
         top_k: int = 10,
         min_num_answers: int | None = None,
     ):
-        # TODO: switch to async client and async api
-        self._client = QdrantClient(host=host, api_key=api_key, https=False, prefer_grpc=True)
+        self._client = AsyncQdrantClient(host=host, api_key=api_key, https=False, prefer_grpc=True)
         self._collection_name = collection_name
-
-        self._set_embed_model()
 
         self._top_k = top_k
         self._query_filter = self._get_query_filter(min_num_answers)
 
+        self._model_initialized = False
+
     async def fetch_documents(self, query_text: str, mardownify_body: bool = True) -> list[dict[str, Any]]:
-        documents = self._client.query(
+        if not self._model_initialized:
+            await self._set_embed_model()
+        documents = await self._client.query(
             query_text=query_text,
             collection_name=self._collection_name,
             query_filter=self._query_filter,
@@ -51,8 +52,8 @@ class StackOverflowFetcher(FetcherAsync):
             result.append({"title": title, "body": body, "metadata": document})
         return result
 
-    def _set_embed_model(self) -> None:
-        collection_info = self._client.get_collection(
+    async def _set_embed_model(self) -> None:
+        collection_info = await self._client.get_collection(
             collection_name=self._collection_name
         )
         embedding_models = list(collection_info.config.params.vectors.keys())
@@ -65,6 +66,7 @@ class StackOverflowFetcher(FetcherAsync):
         if embedding_model not in self._embed_model_mapping:
             raise KeyError(f"Unknown embedding model: {embedding_model}.")
         self._client.set_model(self._embed_model_mapping[embedding_model])
+        self._model_initialized = True
 
     def _get_query_filter(
         self, min_num_answers: int | None

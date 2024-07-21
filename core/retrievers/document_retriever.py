@@ -12,11 +12,6 @@ class Reranker(Protocol):
     def rerank(self, documents: list[str], query: str) -> list[dict[str, Any]]: ...
 
 
-# TODO: switch to async
-def fetch_documents(fetcher: FetcherType, inputs: Any) -> list[dict[str, Any]]:
-    return asyncio.run(fetcher.fetch_documents(inputs))
-
-
 @dataclass
 class RetrieveSource:
     fetcher: FetcherType
@@ -29,7 +24,7 @@ class DocumentRetriever:
         self._sources = sources
         self._reranker = reranker
 
-    def _initial_documents_retrieve(
+    async def _initial_documents_retrieve(
         self, query: str
     ) -> list[tuple[str, dict[str, Any]]]:
         documents = []
@@ -40,11 +35,11 @@ class DocumentRetriever:
             if shallow_fetcher:
                 docs = shallow_fetcher.fetch(query)
             else:
-                docs = fetch_documents(fetcher, query)
+                docs = await fetcher.fetch_documents(query)
             documents.extend((source, doc) for doc in docs)
         return documents
 
-    def _documents_retrieve(
+    async def _documents_retrieve(
         self, documents: list[tuple[str, dict[str, Any]]]
     ) -> list[tuple[str, dict[str, Any]]]:
         documents_dict = defaultdict(list)
@@ -52,6 +47,8 @@ class DocumentRetriever:
             documents_dict[source].append(doc)
 
         retrieve_result = {}
+
+        # TODO: await on whole list of documents
         for source, document_list in documents_dict.items():
             fetcher = self._sources[source].fetcher
             shallow_fetcher = self._sources[source].shallow_fetcher
@@ -59,7 +56,7 @@ class DocumentRetriever:
             if not shallow_fetcher:
                 retrieve_result[source] = document_list
             else:
-                retrieve_result[source] = fetch_documents(fetcher, document_list)
+                retrieve_result[source] = await fetcher.fetch_documents(document_list)
         return retrieve_result
 
     def _prepare_rerank_documents(
@@ -96,9 +93,9 @@ class DocumentRetriever:
             ]
         return formatted_documents
 
-    def retrieve_documents(self, query: str, description: str):
-        documents = self._initial_documents_retrieve(query)
+    async def retrieve_documents(self, query: str, description: str):
+        documents = await self._initial_documents_retrieve(query)
         documents = self._rerank_documents(documents, query, description)
-        documents = self._documents_retrieve(documents)
+        documents = await self._documents_retrieve(documents)
         documents = self._format_documents(documents)
         return documents
