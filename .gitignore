@@ -1,9 +1,13 @@
 # Data volumes 
 mongodb-data 
 mongodb-log
+data 
 
 # Credentials
 .env
+
+# Hydra 
+outputs
 
 # MacOS
 .DS_Store

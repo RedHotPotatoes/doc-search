@@ -5,9 +5,11 @@ services:
     depends_on:
       - mongodb
     networks:
-      - app-network
+      - mongo-network
+      - qdrant-network
     volumes:
       - .:/app
+      - ./data:/app/data
     env_file:
       - .env
     environment:
@@ -20,12 +22,21 @@ services:
       # github
       GITHUB_TOKEN: ${AUTH_GITHUB_TOKEN}
 
+      # openai
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+      # jina
+      JINA_API_KEY: ${JINA_API_KEY}
+
       # proxy
       PROXY_USER: ${PROXY_USER}
       PROXY_PASSWORD: ${PROXY_PASSWORD}
       PROXY_ADDRESS1: ${PROXY_ADDRESS1}
       PROXY_ADDRESS2: ${PROXY_ADDRESS2}
       PROXY_ADDRESS3: ${PROXY_ADDRESS3}
+
+      # qdrant
+      QDRANT__SERVICE__API_KEY: ${QDRANT__SERVICE__API_KEY}
 
     ports:
       - "5009:5009"
@@ -41,7 +52,7 @@ services:
       - ./mongodb-data/data:/data/db/
       - ./mongodb-log:/var/log/mongodb/
     networks:
-      - app-network
+      - mongo-network
     env_file:
       - .env 
     environment:
@@ -57,6 +68,8 @@ volumes:
     name: mongodb-log
 
 networks:
-  app-network:
+  mongo-network:
     driver: bridge
-    name: app-network
+    name: mongo-network
+  qdrant-network:
+    external: true
