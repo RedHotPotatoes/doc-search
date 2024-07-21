@@ -1,3 +1,10 @@
+solution_analyzer:
+  _target_: core.summarizers.solution_analyzer.SolutionAnalyzer
+  llm: 
+    _target_: langchain_openai.ChatOpenAI
+    model: gpt-4o-mini
+    api_key: ${credentials:openai_api_key}
+
 document_retriever:
   _target_: core.retrievers.document_retriever.DocumentRetriever
   sources:
