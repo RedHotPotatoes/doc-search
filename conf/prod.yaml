@@ -1,0 +1,37 @@
+document_retriever:
+  _target_: core.retrievers.document_retriever.DocumentRetriever
+  sources:
+    stackoverflow:
+      _target_: core.retrievers.document_retriever.RetrieveSource
+      fetcher: 
+        _target_: core.fetchers.fetchers.StackOverflowFetcher
+        host: ${credentials:qdrant_host}
+        api_key: ${credentials:qdrant_api_key}
+        top_k: 10
+        min_num_answers: 1
+
+      shallow_fetcher: null
+      
+      document_processor:
+        _target_: core.processors.StackOverflowPayloadParser
+
+    github:
+      _target_: core.retrievers.document_retriever.RetrieveSource
+      fetcher:
+        _target_: core.fetchers.fetchers.GitHubIssuesFetcher
+        filter_none: true
+
+      shallow_fetcher:
+        _target_: core.fetchers.shallow_fetchers.GithubIssuesShallowFetcher
+        github_token: ${credentials:github_token}
+        top_k: 10
+        min_num_comments: 1
+
+      document_processor:
+        _target_: core.processors.GithubIssueHTMLParser
+
+  reranker:
+    _target_: langchain_community.document_compressors.JinaRerank
+    jina_api_key: ${credentials:jina_api_key}
+    model: jina-reranker-v2-base-multilingual
+    top_n: 3
