@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup, NavigableString, Tag
 from markdownify import markdownify
-from core.data_structures import GithubIssueDocument, GithubIssueComment
+
+from core.data_structures import GithubIssueComment, GithubIssueDocument
 
 
 def parse_title(soup: BeautifulSoup) -> str:
@@ -46,7 +47,7 @@ def parse_reactions(comment_div: Tag | NavigableString) -> dict[str, int]:
     return reactions
 
 
-def parse_github_issue_page(html_file: str) -> list[dict[str, str]]:
+def parse_github_issue_page(html_file: str) -> GithubIssueDocument:
     soup = BeautifulSoup(html_file, "lxml")
     comments_data = []
     title = parse_title(soup)
