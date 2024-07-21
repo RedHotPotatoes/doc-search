@@ -1,7 +1,7 @@
 from typing import Any, Dict, List
 
 from core.data_structures import GithubIssueDocument, GithubIssueComment
-from core.summarizes.summarizer import Summarizer, SummaryNode
+from core.summarizers.summarizer import Summarizer, SummaryNode
 
 
 class GithubIssueQuestionSummaryNode(SummaryNode):

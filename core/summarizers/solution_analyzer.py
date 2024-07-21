@@ -1,18 +1,18 @@
 import asyncio
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from langchain.chat_models.base import BaseChatModel
 
 from core.data_structures import GithubIssueDocument, StackOverflowDocument
-from core.summarizes.github import (GitHubIssueDocumentSummarizer,
-                                    GitHubIssueDocumentSummaryNode,
-                                    GithubIssueQuestionSummaryNode,
-                                    GithubIssueReplySummaryNode)
-from core.summarizes.stackoverflow import (StackOverflowAnswerSummaryNode,
-                                           StackOverflowDocumentSummarizer,
-                                           StackOverflowDocumentSummaryNode,
-                                           StackOverflowQuestionSummaryNode)
-from core.summarizes.summarizer import Summarizer, SummaryNode
+from core.summarizers.github import (GitHubIssueDocumentSummarizer,
+                                     GitHubIssueDocumentSummaryNode,
+                                     GithubIssueQuestionSummaryNode,
+                                     GithubIssueReplySummaryNode)
+from core.summarizers.stackoverflow import (StackOverflowAnswerSummaryNode,
+                                            StackOverflowDocumentSummarizer,
+                                            StackOverflowDocumentSummaryNode,
+                                            StackOverflowQuestionSummaryNode)
+from core.summarizers.summarizer import Summarizer, SummaryNode
 
 DocumentType = StackOverflowDocument | GithubIssueDocument
 
@@ -72,12 +72,13 @@ class SolutionAnalyzer:
         description: str = "",
     ) -> str:
         document_summaries = []
-        for document_type, documents in documents.items():
-            doc_summaries = await asyncio.gather(
-                *[self._summarizers[document_type].summarize(document) for document in documents]
-            )
-            document_summaries.extend(doc_summaries)
-
+        documents_unroll = unroll_dict(documents)
+        document_summaries = await asyncio.gather(
+            *[
+                self._summarizers[document_type].summarize(document)
+                for document_type, document in documents_unroll
+            ]
+        )
         solution_aggregator_inputs = {
             "error_message": error_message,
             "description": description,
@@ -86,3 +87,7 @@ class SolutionAnalyzer:
         return await self._solution_aggregator.async_summarize(
             solution_aggregator_inputs
         )
+
+
+def unroll_dict(d: Dict[str, List[DocumentType]]) -> List[Tuple[str, DocumentType]]:
+    return [(k, v) for k, vs in d.items() for v in vs]
