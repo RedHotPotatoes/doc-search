@@ -1,33 +1,16 @@
 from typing import Any, Dict
+
 import requests
-from qdrant_client import QdrantClient
+from markdownify import markdownify
+from pretty_logging import with_logger
+
 from core.safe_requests import SafeRequestMixin
 from core.status_codes import HttpStatusCode
-from pretty_logging import with_logger
 
 
 class ShallowFetcher:
-    def fetch(self, query: str, query_description: str) -> Any:
+    def fetch(self, query: str) -> list[dict[str, Any]]:
         raise NotImplementedError
-
-
-class StackOverflowShallowFetcher:
-    def __init__(
-        self,
-        host: str | None = None,
-        api_key: str | None = None,
-        collection_name: str = "stackoverflow",
-        top_k: int = 10,
-    ):
-        self._client = QdrantClient(host=host, api_key=api_key)
-        self._collection_name = collection_name
-        self._top_k = top_k
-
-    def fetch(self, text: str) -> Any:
-        response = self._client.search(
-            query=text, collection_name=self._collection_name, top_k=self._top_k
-        )
-        return response
 
 
 @with_logger
@@ -42,7 +25,12 @@ class GithubIssuesShallowFetcher(SafeRequestMixin):
     }
 
     # TODO: add rate limits
-    def __init__(self, github_token: str | None = None, top_k: int = 10):
+    def __init__(
+        self,
+        github_token: str | None = None,
+        top_k: int = 10,
+        min_num_comments: int = 1,
+    ):
         headers = {
             "X-GitHub-Api-Version": "2022-11-28",
             "Accept": "application/vnd.github.v3+json",
@@ -52,8 +40,9 @@ class GithubIssuesShallowFetcher(SafeRequestMixin):
         self._headers = headers
         self._url = "https://api.github.com/graphql"
         self._top_k = top_k
+        self._min_num_comments = min_num_comments
 
-    def fetch(self, query_text: str, query_description: str = None) -> Any:
+    def fetch(self, query_text: str, markdownify_body: bool = True) -> list[dict[str, Any]]:
         query = """
 {
   search(query: "%s", type: ISSUE, first: %d) {
@@ -65,6 +54,9 @@ class GithubIssuesShallowFetcher(SafeRequestMixin):
           state
           createdAt
           bodyHTML
+          comments {
+            totalCount
+          }
         }
       }
     }
@@ -78,19 +70,31 @@ class GithubIssuesShallowFetcher(SafeRequestMixin):
             self._url, json={"query": query}, headers=self._headers
         )
         documents = []
-        for edge in response["data"]["search"]["edges"]:
+        edges = response["data"]["search"]["edges"]
+        for edge in edges:
             node = edge["node"]
-            if self._check_keys(node):
-                documents.append(
-                    {self._keys_mapping[key]: node[key] for key in self._fetch_keys}
-                )
+            if self._check_keys(node) and self._check_comments_count(node):
+                data = self._process_node(node, markdownify_body)
+                documents.append(data)
         return documents
+    
+    def _process_node(self, node: Dict[str, Any], markdownify_body: bool) -> Dict[str, Any]:
+        data = {self._keys_mapping[key]: node[key] for key in self._fetch_keys}
+        if markdownify_body and "body" in data:
+            data["body"] = markdownify(data["body"], heading_style="ATX")
+
+        misc_keys = [key for key in data.keys() if key not in ["title", "body"]]
+        data["metadata"] = {key: data.pop(key) for key in misc_keys}
+        return data
 
     def _check_keys(self, node: Dict[str, Any]) -> bool:
         for key in self._fetch_keys:
             if key not in node:
                 return False
         return True
+
+    def _check_comments_count(self, node: Dict[str, Any]) -> bool:
+        return node["comments"]["totalCount"] >= self._min_num_comments
 
     def _handle_post_response(
         self,
