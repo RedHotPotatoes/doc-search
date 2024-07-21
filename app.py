@@ -1,24 +1,31 @@
-from flask import Flask
-from pymongo import MongoClient
-import os
+import hydra
+from fastapi import FastAPI
+from omegaconf import OmegaConf
 
-app = Flask(__name__)
+from core.retrievers.document_retriever import DocumentRetriever
+from core.summarizers.solution_analyzer import SolutionAnalyzer
+from core.utils_hydra import register_resolvers
 
-mongo_host = os.getenv("MONGODB_HOST", "mongodb")
-mongo_port = os.getenv("MONGODB_PORT", 27017)
+app = FastAPI()
 
-client = MongoClient(
-    f"mongodb://{mongo_host}:{mongo_port}/",
-    username=os.getenv("MONGODB_ADMIN_USER"),
-    password=os.getenv("MONGODB_ADMIN_PASS"),
-    authSource="admin",
-)
+register_resolvers()
+conf = OmegaConf.load("conf/prod.yaml")
 
-@app.route("/")
-def startup_page():
-    databases = client.list_database_names()
-    return f"Databases: {databases}"
+document_retriever: DocumentRetriever = hydra.utils.instantiate(conf.document_retriever)
+solution_analyzer: SolutionAnalyzer = hydra.utils.instantiate(conf.solution_analyzer)
 
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5009)
+@app.get("/")
+async def read_root():
+    return {"Hello": "World"}
+
+
+@app.post("/generate_solution")
+async def generate_solution(error_message: str, description: str = ""):
+    documents = await document_retriever.retrieve_documents(error_message, description)
+    if len(documents) == 0:
+        return {"solution": "No documents found."}
+    solution = await solution_analyzer.generate_solution(
+        error_message=error_message, description=description, documents=documents
+    )
+    return {"solution": solution}

@@ -39,7 +39,7 @@ services:
       QDRANT__SERVICE__API_KEY: ${QDRANT__SERVICE__API_KEY}
 
     ports:
-      - "5009:5009"
+      - "8000:8000"
 
   mongodb:
     image: mongo:7.0.0
