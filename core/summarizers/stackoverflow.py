@@ -1,7 +1,9 @@
 from typing import Any, Dict, List
 
-from core.data_structures import Comment, StackOverflowDocument, StackOverflowPost
+from core.data_structures import (Comment, StackOverflowDocument,
+                                  StackOverflowPost)
 from core.summarizers.summarizer import Summarizer, SummaryNode
+from core.utils import deprecated
 
 
 def format_comments(comments: list[Comment]) -> str:
@@ -17,6 +19,54 @@ def format_comment(comment: Comment, index: int | None) -> str:
     return f"{prefix}Comment text: {comment.text}"
 
 
+class StackOverflowDocumentSummaryNodeV2(SummaryNode):
+    _template = (
+        "Summarize the Stackoverflow post. Identify the problem from the question and formulate solutions. "
+        "The summary should contain problem and a bullet list of solutions if the solutions exist. Take into account "
+        "comments to the question and answers since some of them may contain valuable information. "
+        "## Question: {question}. "
+        "## Answers: {answers}"
+    )
+
+    def _format_post(self, post: StackOverflowPost) -> str:
+        if len(post.comments) > 0:
+            comments = format_comments(post.comments)
+            return f"{post.text}\n\nComments: {comments}"
+        return post.text
+
+    def _concatenate_answers(self, answers: List[StackOverflowPost]) -> str:
+        return "\n\n".join(
+            f"**Answer {index + 1}.** {self._format_post(answer)}"
+            for index, answer in enumerate(answers)
+        )
+
+    def _preprocess_input(self, inputs: StackOverflowDocument) -> str:
+        question = self._format_post(inputs.question)
+        answers = inputs.answers
+        if len(answers) == 0:
+            return {
+                "question": question,
+                "answers": "*No answers provided.*",
+            }
+        answers = self._concatenate_answers(answers)
+        return {"question": question, "answers": answers}
+
+
+class StackOverflowDocumentSummarizerV2(Summarizer):
+    def __init__(
+        self,
+        document_summary_node: SummaryNode,
+    ) -> None:
+        self._document_summary_node = document_summary_node
+
+    async def summarize(
+        self,
+        document: StackOverflowDocument,
+    ) -> str:
+        return await self._document_summary_node.async_summarize(document)
+
+
+@deprecated
 class StackOverflowQuestionSummaryNode(SummaryNode):
     _template = (
         "Summarize the question in one or a couple of sentences. "
@@ -25,7 +75,6 @@ class StackOverflowQuestionSummaryNode(SummaryNode):
         "tables, and enumerations; all the text is in markdown format. "
         "## Question: {question_text}. {comments_text}{tags_text}"
     )
-    _input_variables = ["question_text", "comments_text", "tags_text"]
 
     def _preprocess_input(self, inputs: StackOverflowPost) -> str:
         comments = inputs.comments
@@ -48,6 +97,7 @@ class StackOverflowQuestionSummaryNode(SummaryNode):
         }
 
 
+@deprecated
 class StackOverflowAnswerSummaryNode(SummaryNode):
     _template = (
         "{question_prefix}Give a concise summary of the answer to the question. "
@@ -56,7 +106,6 @@ class StackOverflowAnswerSummaryNode(SummaryNode):
         "The answer may contain code snippets, tables, and enumerations; all the text is in "
         "markdown format. ## Answer: {answer_text}. {comments_text}"
     )
-    _input_variables = ["question_prefix", "answer_text", "comments_text"]
 
     def _preprocess_input(self, inputs: StackOverflowPost | Dict[str, Any]) -> str:
         if isinstance(inputs, StackOverflowPost):
@@ -86,6 +135,7 @@ class StackOverflowAnswerSummaryNode(SummaryNode):
         }
 
 
+@deprecated
 class StackOverflowDocumentSummaryNode(SummaryNode):
     _template = (
         "Summarize the Stackoverflow post. It's not exact post, the question and answers "
@@ -93,7 +143,6 @@ class StackOverflowDocumentSummaryNode(SummaryNode):
         "The summary should contain problem and a bullet list of solutions if the solutions exist. "
         "## Question: {question}. ## Answers: {answers}"
     )
-    _input_variables = ["question", "answers"]
 
     def _concatenate_answers(self, answers: List[str]) -> str:
         return "\n\n".join(
@@ -112,6 +161,7 @@ class StackOverflowDocumentSummaryNode(SummaryNode):
         return {"question": question, "answers": answers}
 
 
+@deprecated
 class StackOverflowDocumentSummarizer(Summarizer):
     def __init__(
         self,
@@ -124,9 +174,12 @@ class StackOverflowDocumentSummarizer(Summarizer):
         self._document_summary_node = document_summary_node
 
     async def summarize(
-        self, document: StackOverflowDocument,
+        self,
+        document: StackOverflowDocument,
     ) -> str:
-        question_summary = await self._question_summary_node.async_summarize(document.question)
+        question_summary = await self._question_summary_node.async_summarize(
+            document.question
+        )
         answer_summarizer_inputs = [
             {"question": question_summary, "answer": answer}
             for answer in document.answers
@@ -138,4 +191,6 @@ class StackOverflowDocumentSummarizer(Summarizer):
             "question": question_summary,
             "answers": answers_summary,
         }
-        return await self._document_summary_node.async_summarize(document_summarizer_inputs)
+        return await self._document_summary_node.async_summarize(
+            document_summarizer_inputs
+        )

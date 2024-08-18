@@ -31,27 +31,36 @@ def app(
     document_retriever = hydra.utils.instantiate(conf.document_retriever)
     solution_analyzer = hydra.utils.instantiate(conf.solution_analyzer)
 
-    s = time.perf_counter()
-    solution = asyncio.run(generate_solution(document_retriever, solution_analyzer, error_message, description))
-    elapsed = time.perf_counter() - s
-    _log.info(f"Solution: \n{solution}")
-    _log.info(f"executed in {elapsed:0.2f} seconds.")
+    elapsed = asyncio.run(generate_solution(document_retriever, solution_analyzer, error_message, description))
+    _log.info(f"Retrieved documents in {elapsed['retrieve_elapsed']:0.2f} seconds.")
+    _log.info(f"Analyzed documents in {elapsed['analyze_elapsed']:0.2f} seconds.")
 
 
 async def generate_solution(document_retriever: DocumentRetriever, solution_analyzer: SolutionAnalyzer, error_message: str, description: str) -> str:
+    s = time.time()
     documents = await document_retriever.retrieve_documents(error_message, description)
+    retrieve_elapsed = time.time() - s
     if len(documents) == 0:
         _log.info("No documents found.")
         return
-    solution = await (
-        solution_analyzer.generate_solution(
-            error_message=error_message, 
-            description=description, 
-            documents=documents
-        )
-    )
-    return solution
-
+    
+    s = time.time()
+    async for chunk in solution_analyzer.generate_solution(
+        error_message=error_message, 
+        description=description, 
+        documents=documents
+    ):
+        if isinstance(chunk, str):
+            print(chunk, end="")
+        else:
+            print(chunk.content, end="")
+    print()
+    analyze_elapsed = time.time() - s
+    return {
+        "retrieve_elapsed": retrieve_elapsed,
+        "analyze_elapsed": analyze_elapsed
+    }
+    
 
 if __name__ == "__main__":
     """

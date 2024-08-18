@@ -22,6 +22,7 @@ def _resolve_credentials(key):
         "github_token": "GITHUB_TOKEN",
         "jina_api_key": "JINA_API_KEY",
         "openai_api_key": "OPENAI_API_KEY",
+        "groq_api_key": "GROQ_API_KEY",
     }
     defaults = {
         "qdrant_host": "qdrant",

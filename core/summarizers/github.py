@@ -2,8 +2,63 @@ from typing import Any, Dict, List
 
 from core.data_structures import GithubIssueDocument, GithubIssueComment
 from core.summarizers.summarizer import Summarizer, SummaryNode
+from core.utils import deprecated
 
 
+class GitHubIssueDocumentSummaryNodeV2(SummaryNode):
+    _template = (
+        "Summarize the GitHub issue post. Identify the problem and formulate solutions. "
+        "The summary should contain problem and a bullet list of solutions with short explanation " 
+        "if the solutions exist. "
+        "## Question: {question}. "
+        "## Replies: {replies}"
+    )
+
+    def _concatenate_replies(
+        self, replies: List[str]
+    ) -> str:
+        return "\n\n".join(
+            f"**Reply {index + 1}.** {reply}" for index, reply in enumerate(replies)
+        )
+    
+    def _parse_comment(self, comment: GithubIssueComment) -> str:
+        text = comment.text
+        reactions = comment.reactions
+        if reactions:
+            reactions_text = ", ".join(f"{reaction}: {count}" for reaction, count in reactions.items())
+            reactions_text = f"The reply has reactions: {reactions_text}"
+        else:
+            reactions_text = ""
+        return f"{text}. {reactions_text}"
+
+    def _preprocess_input(self, inputs: GithubIssueDocument) -> str:
+        question = self._parse_comment(inputs.question)
+        replies = [
+            self._parse_comment(answer) for answer in inputs.answers
+        ]
+        if len(replies) == 0:
+            return {
+                "question": question,
+                "replies": "*No replies provided.*",
+            }
+        replies = self._concatenate_replies(replies)
+        return {"question": question, "replies": replies}
+    
+
+class GitHubIssueDocumentSummarizerV2(Summarizer):
+    def __init__(
+        self,
+        document_summary_node: GitHubIssueDocumentSummaryNodeV2,
+    ) -> None:
+        self._document_summary_node = document_summary_node
+    
+    async def summarize(
+        self, document: GithubIssueDocument,
+    ) -> str:
+        return await self._document_summary_node.async_summarize(document)
+
+
+@deprecated
 class GithubIssueQuestionSummaryNode(SummaryNode):
     _template = (
         "Summarize the question in one or a couple of sentences. "
@@ -12,7 +67,6 @@ class GithubIssueQuestionSummaryNode(SummaryNode):
         "tables, and enumerations; all the text is in markdown format. " 
         "## Question: {question_text}. {reactions_text}"
     )
-    _input_variables = ["question_text", "reactions_text"]
 
     def _preprocess_input(self, inputs: GithubIssueComment) -> str:
         question_text = inputs.text
@@ -28,6 +82,7 @@ class GithubIssueQuestionSummaryNode(SummaryNode):
         }
 
 
+@deprecated
 class GithubIssueReplySummaryNode(SummaryNode):
     _template = (
         "{question_prefix}Give a concise summary of the reply to the question. "
@@ -35,7 +90,6 @@ class GithubIssueReplySummaryNode(SummaryNode):
         "The reply may contain code snippets, tables, and enumerations; all the text is in "
         "markdown format. ## Reply: {reply_text}.{reactions_text}"
     )
-    _input_variables = ["question_prefix", "reply_text", "reactions_text"]
 
     def _preprocess_input(self, inputs: GithubIssueComment | Dict[str, Any]) -> str:
         if isinstance(inputs, GithubIssueComment):
@@ -62,6 +116,7 @@ class GithubIssueReplySummaryNode(SummaryNode):
         }
 
 
+@deprecated
 class GitHubIssueDocumentSummaryNode(SummaryNode):
     _template = (
         "Summarize the GitHub issue post. It's not exact post, the question and replies "
@@ -69,7 +124,6 @@ class GitHubIssueDocumentSummaryNode(SummaryNode):
         "The summary should contain problem and a bullet list of solutions if the solutions exist. "
         "## Question: {question}. ## Replies: {replies}"
     )
-    _input_variables = ["question", "replies"]
 
     def _concatenate_replies(
         self, replies: List[str]
@@ -90,6 +144,7 @@ class GitHubIssueDocumentSummaryNode(SummaryNode):
         return {"question": question, "replies": replies}
 
 
+@deprecated
 class GitHubIssueDocumentSummarizer(Summarizer):
     def __init__(
         self,

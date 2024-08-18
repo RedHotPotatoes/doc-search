@@ -1,17 +1,13 @@
 import asyncio
-from typing import Any, Dict, List, Tuple
+from typing import Any, AsyncGenerator, Dict, List, Tuple
 
 from langchain.chat_models.base import BaseChatModel
 
 from core.data_structures import GithubIssueDocument, StackOverflowDocument
-from core.summarizers.github import (GitHubIssueDocumentSummarizer,
-                                     GitHubIssueDocumentSummaryNode,
-                                     GithubIssueQuestionSummaryNode,
-                                     GithubIssueReplySummaryNode)
-from core.summarizers.stackoverflow import (StackOverflowAnswerSummaryNode,
-                                            StackOverflowDocumentSummarizer,
-                                            StackOverflowDocumentSummaryNode,
-                                            StackOverflowQuestionSummaryNode)
+from core.summarizers.github import (GitHubIssueDocumentSummarizerV2,
+                                     GitHubIssueDocumentSummaryNodeV2)
+from core.summarizers.stackoverflow import (StackOverflowDocumentSummarizerV2,
+                                            StackOverflowDocumentSummaryNodeV2)
 from core.summarizers.summarizer import Summarizer, SummaryNode
 
 DocumentType = StackOverflowDocument | GithubIssueDocument
@@ -23,10 +19,11 @@ class DocumentsSolutionAggregator(SummaryNode):
         "There is a list of documents that may contain solutions to the error message. {documents}."
         "First of all select the documents that are relevant to the error message. "
         "If there is no relevant document, reply 'No solutions found'. In case of relevant "
-        "documents, reply a bullet list of detailed solutions to the error message. "
+        "documents, reply a bullet list of solutions to the error message. "
+        "The solutions should be detailed with explanation why it solves the error message. "
+        "In the case there are code snippets or bash commands, include them in the solution. "
         "Reply only a bullet list of solutions."
     )
-    _input_variables = ["error_message", "description", "documents"]
 
     def _preprocess_input(self, inputs: Dict[str, Any]) -> str:
         error_message = inputs.get("error_message")
@@ -52,15 +49,11 @@ class SolutionAnalyzer:
         self._llm = llm
 
         self._summarizers: dict[str, Summarizer] = {
-            "stackoverflow": StackOverflowDocumentSummarizer(
-                question_summary_node=StackOverflowQuestionSummaryNode(llm),
-                answer_summary_node=StackOverflowAnswerSummaryNode(llm),
-                document_summary_node=StackOverflowDocumentSummaryNode(llm),
+            "stackoverflow": StackOverflowDocumentSummarizerV2(
+                document_summary_node=StackOverflowDocumentSummaryNodeV2(llm),
             ),
-            "github": GitHubIssueDocumentSummarizer(
-                question_summary_node=GithubIssueQuestionSummaryNode(llm),
-                reply_summary_node=GithubIssueReplySummaryNode(llm),
-                document_summary_node=GitHubIssueDocumentSummaryNode(llm),
+            "github": GitHubIssueDocumentSummarizerV2(
+                document_summary_node=GitHubIssueDocumentSummaryNodeV2(llm),
             ),
         }
         self._solution_aggregator = DocumentsSolutionAggregator(llm)
@@ -70,7 +63,7 @@ class SolutionAnalyzer:
         error_message: str,
         documents: Dict[str, List[DocumentType]],
         description: str = "",
-    ) -> str:
+    ) -> str | AsyncGenerator[str, None]:
         document_summaries = []
         documents_unroll = unroll_dict(documents)
         document_summaries = await asyncio.gather(
@@ -84,9 +77,13 @@ class SolutionAnalyzer:
             "description": description,
             "documents": document_summaries,
         }
-        return await self._solution_aggregator.async_summarize(
+        async for chunk in self._solution_aggregator.astream_summarize(
             solution_aggregator_inputs
-        )
+        ):  
+            if isinstance(chunk, str):
+                yield chunk
+            else:
+                yield chunk.content
 
 
 def unroll_dict(d: Dict[str, List[DocumentType]]) -> List[Tuple[str, DocumentType]]:
