@@ -1,9 +1,9 @@
-import asyncio
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from core.fetchers.fetchers import FetcherType
+from core.fetchers.link_fetchers import LinkFetcher
 from core.fetchers.shallow_fetchers import ShallowFetcher
 from core.processors import DocumentProcessor
 
@@ -16,6 +16,7 @@ class Reranker(Protocol):
 class RetrieveSource:
     fetcher: FetcherType
     shallow_fetcher: ShallowFetcher | None
+    link_fetcher: LinkFetcher
     document_processor: DocumentProcessor
 
 
@@ -81,6 +82,11 @@ class DocumentRetriever:
 
         indices = [result["index"] for result in rerank_result]
         return [documents[i] for i in indices]
+    
+    def _get_links(self, documents: list[dict[str, Any]]) -> list[str]:
+        return [
+            self._sources[source].link_fetcher.get_link(doc) for source, doc in documents
+        ]
 
     def _format_documents(
         self, documents: dict[str, list[dict[str, Any]]]
@@ -96,6 +102,7 @@ class DocumentRetriever:
     async def retrieve_documents(self, query: str, description: str):
         documents = await self._initial_documents_retrieve(query)
         documents = self._rerank_documents(documents, query, description)
+        links = self._get_links(documents)
         documents = await self._documents_retrieve(documents)
         documents = self._format_documents(documents)
-        return documents
+        return documents, links
