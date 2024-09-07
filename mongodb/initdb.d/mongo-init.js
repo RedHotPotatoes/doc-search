@@ -50,3 +50,22 @@ createDatabase(
         { fields: { question_id: 1 }, options: { unique: true } }
     ]
 )
+
+createDatabase(
+    "troubleshooting",
+    "search_queries", 
+    [
+        {
+            "user_id": -1,
+            "query_text": "query_text",
+            "links": ["link1", "link2"],
+            "search_engine": "google",
+            "created_at": 1615027200,
+            "updated_at": 1615027200,
+            "conversation": [],
+        }
+    ],
+    [
+
+    ]
+)

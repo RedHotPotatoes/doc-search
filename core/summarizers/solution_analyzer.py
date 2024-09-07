@@ -17,7 +17,7 @@ class DocumentsSolutionAggregator(SummaryNode):
     _template = (
         "Got the error message: {error_message}. {description}"
         "There is a list of documents that may contain solutions to the error message. {documents}."
-        "First of all select the documents that are relevant to the error message. "
+        "First of all select the documents that are relevant to the error message. \n\n"
         "If there is no relevant document, reply 'No solutions found'. In case of relevant "
         "documents, reply a bullet list of solutions to the error message. "
         "The solutions should be detailed with explanation why it solves the error message. "
@@ -33,8 +33,8 @@ class DocumentsSolutionAggregator(SummaryNode):
         if len(documents) == 0:
             raise ValueError("No documents provided.")
 
-        documents_text = "\n\n".join(
-            f"**Document {index + 1}.** {answer}"
+        documents_text = "".join(
+            f"\n\n## Document {index + 1}. \n\n{answer}"
             for index, answer in enumerate(documents)
         )
         return {
@@ -63,6 +63,7 @@ class SolutionAnalyzer:
         error_message: str,
         documents: Dict[str, List[DocumentType]],
         description: str = "",
+        yield_prompt: bool = False,
     ) -> str | AsyncGenerator[str, None]:
         document_summaries = []
         documents_unroll = unroll_dict(documents)
@@ -75,8 +76,16 @@ class SolutionAnalyzer:
         solution_aggregator_inputs = {
             "error_message": error_message,
             "description": description,
-            "documents": document_summaries,
+            "documents": [
+                doc.content for doc in document_summaries
+            ],
         }
+        if yield_prompt:
+            inputs_preproc = self._solution_aggregator._preprocess_input(
+                solution_aggregator_inputs
+            )
+            yield self._solution_aggregator._chain.get_prompts()[0].format(**inputs_preproc)
+
         async for chunk in self._solution_aggregator.astream_summarize(
             solution_aggregator_inputs
         ):  

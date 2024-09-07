@@ -4,6 +4,15 @@ solution_analyzer:
     _target_: langchain_openai.ChatOpenAI
     model: gpt-4o-mini
     api_key: ${credentials:openai_api_key}
+    # _target_: langchain_groq.ChatGroq 
+    # api_key: ${credentials:groq_api_key}
+    # model: llama-3.1-8b-instant
+    # model: llama-3.1-70b-versatile
+
+conversation_llm:
+  _target_: langchain_openai.ChatOpenAI
+  model: gpt-4o-mini
+  api_key: ${credentials:openai_api_key}
 
 document_retriever:
   _target_: core.retrievers.document_retriever.DocumentRetriever
@@ -18,6 +27,9 @@ document_retriever:
         min_num_answers: 1
 
       shallow_fetcher: null
+
+      link_fetcher:
+        _target_: core.fetchers.link_fetchers.StackOverflowLinkFetcher
       
       document_processor:
         _target_: core.processors.StackOverflowPayloadParser
@@ -33,6 +45,9 @@ document_retriever:
         github_token: ${credentials:github_token}
         top_k: 10
         min_num_comments: 1
+
+      link_fetcher:
+        _target_: core.fetchers.link_fetchers.GithubIssueLinkFetcher
 
       document_processor:
         _target_: core.processors.GithubIssueHTMLParser

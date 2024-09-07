@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Sequence
+from typing import Any, Coroutine, Sequence
 
 from langchain.chat_models.base import BaseChatModel
 from langchain.prompts import ChatPromptTemplate
@@ -21,7 +21,7 @@ class SummaryNode:
     def summarize_multiple(self, inputs: Sequence[Any]):
         return [self.summarize(input_) for input_ in inputs]
     
-    async def async_summarize(self, inputs: Any):
+    async def async_summarize(self, inputs: Any) -> Coroutine[str, Any, Any]:
         result = await self._chain.ainvoke(self._preprocess_input(inputs))
         return result
 
