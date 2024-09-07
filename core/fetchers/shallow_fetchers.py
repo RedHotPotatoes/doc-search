@@ -43,6 +43,7 @@ class GithubIssuesShallowFetcher(SafeRequestMixin):
         self._min_num_comments = min_num_comments
 
     def fetch(self, query_text: str, markdownify_body: bool = True) -> list[dict[str, Any]]:
+        query_text = query_text.replace('"', '\\"')
         query = """
 {
   search(query: "%s", type: ISSUE, first: %d) {
@@ -69,6 +70,9 @@ class GithubIssuesShallowFetcher(SafeRequestMixin):
         response = self._post_request(
             self._url, json={"query": query}, headers=self._headers
         )
+        if response is None:
+            return []
+        
         documents = []
         edges = response["data"]["search"]["edges"]
         for edge in edges:
