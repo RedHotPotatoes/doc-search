@@ -1,3 +1,5 @@
+// mongosh --username --password --authenticationDatabase admin
+
 function createDatabase(dbName, collectionName, data, indexes) {
     const dbInstance = db.getSiblingDB(dbName);
     if (!dbInstance.getCollectionNames().includes(collectionName)) {
@@ -67,5 +69,39 @@ createDatabase(
     ],
     [
 
+    ]
+)
+
+createDatabase(
+    "troubleshooting",
+    "reactions",
+    [
+        {
+            "user_id": -1,
+            "search_query_id": -1,
+            "reaction": "like",
+            "created_at": 1615027200,
+        }
+    ],
+    [
+        { fields: { user_id: 1, search_query_id: 1 }, options: { unique: true } }
+    ]
+)
+
+createDatabase(
+    "troubleshooting",
+    "users",
+    [
+        {
+            "email": "user@example.com",
+            "name": "example_name",
+            "created_at": 1615027200,
+            "updated_at": 1615027200,
+            "google_sub": "184248833606034064985",
+        }
+    ],
+    [
+        { fields: { email: 1 }, options: { unique: true } },
+        { fields: { google_sub: 1 }, options: { unique: true } },
     ]
 )

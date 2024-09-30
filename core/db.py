@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, List, Protocol
 
 from bson.objectid import ObjectId
@@ -100,16 +101,14 @@ class MongoDB(MongoClientMixin):
 
     def update(
         self,
-        update_key: str,
-        data: Dict[str, Any],
+        key: Dict[str, Any],
+        update_ops: Dict[str, Any],
         database: str | None = None,
         collection: str | None = None,
         upsert: bool = False,
     ) -> None:
         collection = self._get_collection(database, collection)
-        collection.update_one(
-            {update_key: data[update_key]}, {"$set": data}, upsert=upsert
-        )
+        collection.update_one(key, update_ops, upsert=upsert)
 
     def update_bulk(
         self,
@@ -132,6 +131,15 @@ class MongoDB(MongoClientMixin):
             )
         collection.bulk_write(operations)
 
+    def delete(
+        self,
+        key: Dict[str, Any],
+        database: str | None = None,
+        collection: str | None = None,
+    ) -> None:
+        collection = self._get_collection(database, collection)
+        collection.delete_one(key)
+
 
 class AsyncMongoDB(MongoClientMixin):
     def __init__(
@@ -152,10 +160,13 @@ class AsyncMongoDB(MongoClientMixin):
         self._default_collection = self._default_db[default_collection]
 
     async def get(
-        self, key: str, database: str | None = None, collection: str | None = None
+        self,
+        key: Dict[str, Any],
+        database: str | None = None,
+        collection: str | None = None,
     ) -> Any:
         collection = self._get_collection(database, collection)
-        return await collection.find_one({key: key})
+        return await collection.find_one(key)
 
     async def get_by_id(
         self, id: str, database: str | None = None, collection: str | None = None
@@ -190,20 +201,18 @@ class AsyncMongoDB(MongoClientMixin):
         upsert: bool = False,
     ) -> None:
         collection = self._get_collection(database, collection)
-        await collection.update_one({"_id": ObjectId(id)}, update_ops, upsert=upsert)
+        return await collection.update_one({"_id": ObjectId(id)}, update_ops, upsert=upsert)
 
     async def update(
         self,
-        update_key: str,
-        data: Dict[str, Any],
+        key: Dict[str, Any],
+        update_ops: Dict[str, Any],
         database: str | None = None,
         collection: str | None = None,
         upsert: bool = False,
-    ) -> None:
+    ):
         collection = self._get_collection(database, collection)
-        await collection.update_one(
-            {update_key: data[update_key]}, {"$set": data}, upsert=upsert
-        )
+        return await collection.update_one(key, update_ops, upsert=upsert)
 
     async def update_bulk(
         self,
@@ -212,7 +221,7 @@ class AsyncMongoDB(MongoClientMixin):
         database: str | None = None,
         collection: str | None = None,
         upsert: bool = False,
-    ) -> None:
+    ):
         collection = self._get_collection(database, collection)
 
         operations = []
@@ -224,4 +233,34 @@ class AsyncMongoDB(MongoClientMixin):
                     upsert=upsert,
                 )
             )
-        await collection.bulk_write(operations)
+        return await collection.bulk_write(operations)
+
+    async def delete(
+        self,
+        key: Dict[str, Any],
+        database: str | None = None,
+        collection: str | None = None,
+    ) -> None:
+        collection = self._get_collection(database, collection)
+        await collection.delete_one(key)
+
+
+def init_mongo_db_instance(
+    is_async: bool = True,
+    default_db: str | None = None,
+    default_collection: str | None = None,
+) -> MongoDB | AsyncMongoDB:
+    mongo_host = os.getenv("MONGODB_HOST", "mongodb")
+    mongo_port = os.getenv("MONGODB_PORT", 27017)
+    host = f"mongodb://{mongo_host}:{mongo_port}/"
+
+    settings = {
+        "host": host,
+        "default_db": default_db,
+        "default_collection": default_collection,
+        "username": os.getenv("MONGODB_ADMIN_USER"),
+        "password": os.getenv("MONGODB_ADMIN_PASS"),
+    }
+    if is_async:
+        return AsyncMongoDB(**settings)
+    return MongoDB(**settings)
