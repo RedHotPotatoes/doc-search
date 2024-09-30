@@ -1,78 +1,71 @@
-import asyncio
-from typing import Any, AsyncGenerator, Dict, List, Tuple
+from typing import Any, AsyncGenerator
 
-from langchain.chat_models.base import BaseChatModel
-
-from core.data_structures import GithubIssueDocument, StackOverflowDocument
-from core.summarizers.github import (GitHubIssueDocumentSummarizerV2,
-                                     GitHubIssueDocumentSummaryNodeV2)
-from core.summarizers.stackoverflow import (StackOverflowDocumentSummarizerV2,
-                                            StackOverflowDocumentSummaryNodeV2)
-from core.summarizers.summarizer import Summarizer, SummaryNode
-
-DocumentType = StackOverflowDocument | GithubIssueDocument
+from core.data_structures import MarkdownSerializable
+from core.summarizers.summarizer import LLMNode
+from core.utils_stream import parse_stream_chunk
 
 
-class DocumentsSolutionAggregator(SummaryNode):
+class SolutionAnalyzer(LLMNode):
     _template = (
-        "Got the error message: {error_message}. {description}"
-        "There is a list of documents that may contain solutions to the error message. {documents}."
-        "First of all select the documents that are relevant to the error message. \n\n"
-        "If there is no relevant document, reply 'No solutions found'. In case of relevant "
-        "documents, reply a bullet list of solutions to the error message. "
-        "The solutions should be detailed with explanation why it solves the error message. "
-        "In the case there are code snippets or bash commands, include them in the solution. "
-        "Reply only a bullet list of solutions."
+        "You are expert in software development known for abilities to highly accurate analyze the error messages. \n\n"
+        "You are given the error message inside tag <error_message>. You need to analyze the error message and reply "
+        "the list of potential solutions to the error message. \n\n"
+        "{document_context_prompt}"
+        "Follow the output format: \n"
+        "1. Solutions should be provided as bullet list. \n"
+        "2. Each solution starts with title in the format **title** \n"
+        "3. Then provide brief explanation why this solution solves the error message. \n"
+        "4. Finally, provide the detailed step by step instructions how to solve the error message. \n"
+        "Include the code snippets, bash commands, links to the code snippets, etc. Don't be lazy, be detailed. \n\n"
+        "Give brief introduction. \n"
+        "<error_message>\n"
+        "{error_message}\n"
+        "</error_message>"
     )
 
-    def _preprocess_input(self, inputs: Dict[str, Any]) -> str:
+    _document_context_prompt = (
+        "Before you start to analyze the error message, look at the list of documents that *may* contain solutions to the error message. "
+        "Each document is inside <document> tag. First of all, documents are the summaries of the web-documents such as StackOverflow, Github issues, "
+        "Github discussions and others. The summaries contain the question in <question> tag and potential solutions in <solution> tags. "
+        "Some documents may not contain solutions. \n\n"
+        "Start with your own solutions, use the documents to reinforce your knowledge in the field. \n\n"
+        "{documents}\n\n"
+    )
+
+    def _preprocess_input(self, inputs: dict[str, Any]) -> str:
         error_message = inputs.get("error_message")
-        description = inputs.get("description", "")
         documents = inputs.get("documents")
 
         if len(documents) == 0:
-            raise ValueError("No documents provided.")
+            context_prompt = ""
+        else:
+            documents_text = "\n\n".join(
+                f"<document>\n{doc}\n</document>"
+                for doc in documents
+            )
+            context_prompt = self._document_context_prompt.format(
+                documents=documents_text
+            )
 
-        documents_text = "".join(
-            f"\n\n## Document {index + 1}. \n\n{answer}"
-            for index, answer in enumerate(documents)
-        )
         return {
             "error_message": error_message,
-            "description": description,
-            "documents": documents_text,
+            "document_context_prompt": context_prompt,
         }
 
 
-class SolutionAnalyzer:
-    def __init__(self, llm: BaseChatModel) -> None:
-        self._llm = llm
-
-        self._summarizers: dict[str, Summarizer] = {
-            "stackoverflow": StackOverflowDocumentSummarizerV2(
-                document_summary_node=StackOverflowDocumentSummaryNodeV2(llm),
-            ),
-            "github": GitHubIssueDocumentSummarizerV2(
-                document_summary_node=GitHubIssueDocumentSummaryNodeV2(llm),
-            ),
-        }
-        self._solution_aggregator = DocumentsSolutionAggregator(llm)
+class SolutionAggregator:
+    def __init__(self, summarizer: LLMNode, solution_analyzer: LLMNode) -> None:
+        self._summarizer = summarizer
+        self._solution_analyzer = solution_analyzer
 
     async def generate_solution(
         self,
         error_message: str,
-        documents: Dict[str, List[DocumentType]],
+        documents: list[MarkdownSerializable],
         description: str = "",
         yield_prompt: bool = False,
     ) -> str | AsyncGenerator[str, None]:
-        document_summaries = []
-        documents_unroll = unroll_dict(documents)
-        document_summaries = await asyncio.gather(
-            *[
-                self._summarizers[document_type].summarize(document)
-                for document_type, document in documents_unroll
-            ]
-        )
+        document_summaries = await self._summarizer.ainvoke_multiple(documents)
         solution_aggregator_inputs = {
             "error_message": error_message,
             "description": description,
@@ -81,19 +74,12 @@ class SolutionAnalyzer:
             ],
         }
         if yield_prompt:
-            inputs_preproc = self._solution_aggregator._preprocess_input(
+            inputs_preproc = self._solution_analyzer._preprocess_input(
                 solution_aggregator_inputs
             )
-            yield self._solution_aggregator._chain.get_prompts()[0].format(**inputs_preproc)
+            yield self._solution_analyzer._chain.get_prompts()[0].format(**inputs_preproc)
 
-        async for chunk in self._solution_aggregator.astream_summarize(
+        async for chunk in self._solution_analyzer.astream(
             solution_aggregator_inputs
         ):  
-            if isinstance(chunk, str):
-                yield chunk
-            else:
-                yield chunk.content
-
-
-def unroll_dict(d: Dict[str, List[DocumentType]]) -> List[Tuple[str, DocumentType]]:
-    return [(k, v) for k, vs in d.items() for v in vs]
+            yield parse_stream_chunk(chunk)

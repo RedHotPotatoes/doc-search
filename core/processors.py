@@ -1,8 +1,8 @@
 from typing import Any
 
-from core.data_structures import GithubIssueDocument, StackOverflowDocument
-from core.parsers.github import parse_github_issue_page
-from core.parsers.stackoverflow import parse_stackoverflow_question_page
+from core.data_structures import GithubIssueDocument
+from core.parsers.github_issues import parse_github_issue_page
+from core.parsers.stackoverflow_index import StackOverflowDocument, parse_stackoverflow_question_page
 
 
 class DocumentProcessor:

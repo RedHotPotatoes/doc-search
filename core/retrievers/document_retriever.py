@@ -2,25 +2,39 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from core.fetchers.fetchers import FetcherType
+import aiohttp
+from pretty_logging import with_logger
+from requests import Response
+
+from core.fetchers.fetchers import FetcherType, WebPageFetcher
 from core.fetchers.link_fetchers import LinkFetcher
 from core.fetchers.shallow_fetchers import ShallowFetcher
+from core.parsers import get_parser
 from core.processors import DocumentProcessor
+from core.safe_requests_async import SafeRequestMixin
 
 
 class Reranker(Protocol):
     def rerank(self, documents: list[str], query: str) -> list[dict[str, Any]]: ...
 
 
+class SearchEngine(Protocol):
+    async def search(self, query: str) -> list[str]: ...
+
+
+class DocumentRetriever(Protocol):
+    async def retrieve_documents(self, query: str) -> Any: ...
+
+
 @dataclass
 class RetrieveSource:
     fetcher: FetcherType
-    shallow_fetcher: ShallowFetcher | None
+    shallow_fetcher: ShallowFetcher
     link_fetcher: LinkFetcher
     document_processor: DocumentProcessor
 
 
-class DocumentRetriever:
+class MixedSourceDocumentRetriever:
     def __init__(self, sources: dict[str, RetrieveSource], reranker: Reranker):
         self._sources = sources
         self._reranker = reranker
@@ -106,3 +120,77 @@ class DocumentRetriever:
         documents = await self._documents_retrieve(documents)
         documents = self._format_documents(documents)
         return documents, links
+
+
+class GoogleSearchEngine(SafeRequestMixin):
+    def __init__(self, api_key: str, cse_id: str, max_results: int = 10):
+        self._api_key = api_key
+        self._cse_id = cse_id
+        self._max_results = max_results
+
+    async def search(self, query: str) -> list[str]:
+        url = "https://www.googleapis.com/customsearch/v1"
+        params = {
+            "key": self._api_key,
+            "cx": self._cse_id,
+            "q": query,
+            "num": self._max_results,
+        }
+        async with aiohttp.ClientSession() as client:
+            search_results = await self._get_request(client, url, params=params)
+
+        links = []
+        for item in search_results.get("items", []):
+            links.append(item["link"])
+        return links
+    
+    async def _handle_get_response(
+        self,
+        response: Response,
+        url: str | None,
+        headers: dict[str, str] | None,
+        params: dict[str, str] | None,
+    ):
+        response.raise_for_status()
+        return await response.json()
+    
+
+@with_logger
+class WebDocumentRetriever:
+    def __init__(self, search_engine: SearchEngine):
+        self._search_engine = search_engine
+        self._fetcher = WebPageFetcher()
+
+    async def _parse_documents(self, links_raw: list[str]) -> Any:
+        links, parsers = [], []
+        for link in links_raw:
+            parser = get_parser(link)
+            if parser:
+                links.append(link)
+                parsers.append(parser)
+        if not links:
+            return [], {}
+
+        documents_raw = await self._fetcher.fetch_documents(links)
+        documents = []
+        links_succeeded = []
+        for link, parser, doc_raw in zip(links, parsers, documents_raw):
+            try:
+                document = parser(doc_raw)
+            except Exception as e:
+                self._log.error(f"Error parsing web document with link: {link}")
+                self._log.error(f"Error: {e}")
+                continue
+            documents.append(document)
+            links_succeeded.append(link)
+        links_dict = {
+            "links_raw": links_raw, 
+            "links": links,
+            "links_succeeded": links_succeeded,
+        }
+        return documents, links_dict
+
+    async def retrieve_documents(self, query: str) -> Any:
+        links = await self._search_engine.search(query)
+        documents, links_dict = await self._parse_documents(links)
+        return documents, links_dict

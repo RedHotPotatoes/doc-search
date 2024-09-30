@@ -3,6 +3,9 @@ mongodb-data
 mongodb-log
 data 
 
+# Artifacts
+parsers_output
+
 # Credentials
 .env
 

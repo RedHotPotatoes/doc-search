@@ -1,11 +1,12 @@
 from typing import Any, Dict, List
 
 from core.data_structures import GithubIssueDocument, GithubIssueComment
-from core.summarizers.summarizer import Summarizer, SummaryNode
+from core.summarizers.summarizer import Summarizer, LLMNode
 from core.utils import deprecated
 
 
-class GitHubIssueDocumentSummaryNodeV2(SummaryNode):
+@deprecated
+class GitHubIssueDocumentSummaryNodeV2(LLMNode):
     _template = (
         "Summarize the GitHub issue post. Identify the problem and formulate solutions. "
         "The summary should contain problem and a bullet list of solutions with short explanation " 
@@ -45,6 +46,7 @@ class GitHubIssueDocumentSummaryNodeV2(SummaryNode):
         return {"question": question, "replies": replies}
     
 
+@deprecated
 class GitHubIssueDocumentSummarizerV2(Summarizer):
     def __init__(
         self,
@@ -55,11 +57,11 @@ class GitHubIssueDocumentSummarizerV2(Summarizer):
     async def summarize(
         self, document: GithubIssueDocument,
     ) -> str:
-        return await self._document_summary_node.async_summarize(document)
+        return await self._document_summary_node.ainvoke(document)
 
 
 @deprecated
-class GithubIssueQuestionSummaryNode(SummaryNode):
+class GithubIssueQuestionSummaryNode(LLMNode):
     _template = (
         "Summarize the question in one or a couple of sentences. "
         "Make sure to include the main problem and the context. "
@@ -83,7 +85,7 @@ class GithubIssueQuestionSummaryNode(SummaryNode):
 
 
 @deprecated
-class GithubIssueReplySummaryNode(SummaryNode):
+class GithubIssueReplySummaryNode(LLMNode):
     _template = (
         "{question_prefix}Give a concise summary of the reply to the question. "
         "Summarize the reply clearly and concisely. Keep code snippets and shell commands. "
@@ -117,7 +119,7 @@ class GithubIssueReplySummaryNode(SummaryNode):
 
 
 @deprecated
-class GitHubIssueDocumentSummaryNode(SummaryNode):
+class GitHubIssueDocumentSummaryNode(LLMNode):
     _template = (
         "Summarize the GitHub issue post. It's not exact post, the question and replies "
         "are summarized. Identify the problem and formulate solutions. "
@@ -159,16 +161,16 @@ class GitHubIssueDocumentSummarizer(Summarizer):
     async def summarize(
         self, document: GithubIssueDocument,
     ) -> str:
-        question_summary = await self._question_summary_node.async_summarize(document.question)
+        question_summary = await self._question_summary_node.ainvoke(document.question)
         reply_summarizer_inputs = [
             {"question": question_summary, "reply": reply}
             for reply in document.answers
         ]
-        replies_summary = await self._reply_summary_node.async_summarize_multiple(
+        replies_summary = await self._reply_summary_node.ainvoke_multiple(
             reply_summarizer_inputs
         )
         document_summarizer_inputs = {
             "question": question_summary,
             "replies": replies_summary,
         }
-        return await self._document_summary_node.async_summarize(document_summarizer_inputs)
+        return await self._document_summary_node.ainvoke(document_summarizer_inputs)

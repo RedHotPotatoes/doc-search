@@ -6,13 +6,16 @@ from pretty_logging import with_logger
 
 from core.safe_requests import SafeRequestMixin
 from core.status_codes import HttpStatusCode
+from core.utils import deprecated
 
 
+@deprecated
 class ShallowFetcher:
     def fetch(self, query: str) -> list[dict[str, Any]]:
         raise NotImplementedError
 
 
+@deprecated
 @with_logger
 class GithubIssuesShallowFetcher(SafeRequestMixin):
     _fetch_keys = ["title", "url", "bodyHTML"]

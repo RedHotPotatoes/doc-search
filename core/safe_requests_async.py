@@ -3,7 +3,6 @@ import logging
 from pathlib import Path
 from typing import Any, Callable, Dict
 
-import aiohttp
 from pretty_logging import with_logger
 from requests import Response
 
@@ -16,8 +15,8 @@ async def _safe_request(
     url: str,
     headers: Dict[str, str] | None = None,
     params: Dict[str, str] | None = None,
-    max_retries: int = 5,
-    retry_delay: float = 5.0,
+    max_retries: int = 3,
+    retry_delay: float = 3.0,
     **request_kwargs
 ):
     retry_count = 0

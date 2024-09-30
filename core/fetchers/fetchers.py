@@ -25,7 +25,9 @@ class StackOverflowFetcher(FetcherAsync):
         top_k: int = 10,
         min_num_answers: int | None = None,
     ):
-        self._client = AsyncQdrantClient(host=host, api_key=api_key, https=False, prefer_grpc=True)
+        self._client = AsyncQdrantClient(
+            host=host, api_key=api_key, https=False, prefer_grpc=True
+        )
         self._collection_name = collection_name
 
         self._top_k = top_k
@@ -33,7 +35,9 @@ class StackOverflowFetcher(FetcherAsync):
 
         self._model_initialized = False
 
-    async def fetch_documents(self, query_text: str, mardownify_body: bool = True) -> list[dict[str, Any]]:
+    async def fetch_documents(
+        self, query_text: str, mardownify_body: bool = True
+    ) -> list[dict[str, Any]]:
         if not self._model_initialized:
             await self._set_embed_model()
         documents = await self._client.query(
@@ -68,9 +72,7 @@ class StackOverflowFetcher(FetcherAsync):
         self._client.set_model(self._embed_model_mapping[embedding_model])
         self._model_initialized = True
 
-    def _get_query_filter(
-        self, min_num_answers: int | None
-    ) -> models.Filter | None:
+    def _get_query_filter(self, min_num_answers: int | None) -> models.Filter | None:
         filters = []
         if min_num_answers:
             filters.append(
@@ -84,23 +86,12 @@ class StackOverflowFetcher(FetcherAsync):
         return
 
 
-class GitHubIssuesFetcher(FetcherAsync, SafeRequestMixin):
-    def __init__(self, field: str = "metadata", url_field : str = "url", filter_none: bool = True):
-        self._field = field
-        self._url_field = url_field
-        self._filter_none = filter_none
-
-    async def fetch_documents(
-        self, documents: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
-        links = [doc[self._field][self._url_field] for doc in documents]
-        
+class WebPageFetcher(FetcherAsync, SafeRequestMixin):
+    async def fetch_documents(self, links: list[str]) -> list[str]:
         async with aiohttp.ClientSession() as client:
             documents = await asyncio.gather(
                 *[self._get_request(client, link) for link in links]
             )
-        if self._filter_none:
-            documents = [doc for doc in documents if doc is not None]
         return documents
 
     async def _handle_get_response(
@@ -112,6 +103,24 @@ class GitHubIssuesFetcher(FetcherAsync, SafeRequestMixin):
     ) -> Any:
         response.raise_for_status()
         return await response.text()
+
+
+class GitHubIssuesFetcher(WebPageFetcher):
+    def __init__(
+        self, field: str = "metadata", url_field: str = "url", filter_none: bool = True
+    ):
+        self._field = field
+        self._url_field = url_field
+        self._filter_none = filter_none
+
+    async def fetch_documents(
+        self, documents: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        links = [doc[self._field][self._url_field] for doc in documents]
+        documents = await super().fetch_documents(links)
+        if self._filter_none:
+            documents = [doc for doc in documents if doc is not None]
+        return documents
 
 
 FetcherType = FetcherAsync

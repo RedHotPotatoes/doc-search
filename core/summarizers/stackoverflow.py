@@ -1,12 +1,13 @@
 from typing import Any, Dict, List
 
-from core.data_structures import (Comment, StackOverflowDocument,
-                                  StackOverflowPost)
-from core.summarizers.summarizer import Summarizer, SummaryNode
+from core.parsers.stackoverflow_index import (StackOverflowDocument)
+from core.parsers.stackoverflow_index import StackOverflowComment, StackOverflowPost
+from core.summarizers.summarizer import Summarizer, LLMNode
 from core.utils import deprecated
 
 
-def format_comments(comments: list[Comment]) -> str:
+@deprecated
+def format_comments(comments: list[StackOverflowComment]) -> str:
     if len(comments) == 0:
         return "*No comments provided.*"
     return "\n\n".join(
@@ -14,12 +15,14 @@ def format_comments(comments: list[Comment]) -> str:
     )
 
 
-def format_comment(comment: Comment, index: int | None) -> str:
+@deprecated
+def format_comment(comment: StackOverflowComment, index: int | None) -> str:
     prefix = f"**Comment {index}.** " if index is not None else ""
     return f"{prefix}Comment text: {comment.text}"
 
 
-class StackOverflowDocumentSummaryNodeV2(SummaryNode):
+@deprecated
+class StackOverflowDocumentSummaryNodeV2(LLMNode):
     _template = (
         "Summarize the Stackoverflow post. Identify the problem from the question and formulate solutions. "
         "The summary should contain problem and a bullet list of solutions if the solutions exist. Take into account "
@@ -52,10 +55,11 @@ class StackOverflowDocumentSummaryNodeV2(SummaryNode):
         return {"question": question, "answers": answers}
 
 
+@deprecated
 class StackOverflowDocumentSummarizerV2(Summarizer):
     def __init__(
         self,
-        document_summary_node: SummaryNode,
+        document_summary_node: LLMNode,
     ) -> None:
         self._document_summary_node = document_summary_node
 
@@ -63,11 +67,11 @@ class StackOverflowDocumentSummarizerV2(Summarizer):
         self,
         document: StackOverflowDocument,
     ) -> str:
-        return await self._document_summary_node.async_summarize(document)
+        return await self._document_summary_node.ainvoke(document)
 
 
 @deprecated
-class StackOverflowQuestionSummaryNode(SummaryNode):
+class StackOverflowQuestionSummaryNode(LLMNode):
     _template = (
         "Summarize the question in one or a couple of sentences. "
         "Make sure to include the main problem and the context. "
@@ -98,7 +102,7 @@ class StackOverflowQuestionSummaryNode(SummaryNode):
 
 
 @deprecated
-class StackOverflowAnswerSummaryNode(SummaryNode):
+class StackOverflowAnswerSummaryNode(LLMNode):
     _template = (
         "{question_prefix}Give a concise summary of the answer to the question. "
         "Summarize the answer clearly and concisely. If there is no answer to the question, "
@@ -136,7 +140,7 @@ class StackOverflowAnswerSummaryNode(SummaryNode):
 
 
 @deprecated
-class StackOverflowDocumentSummaryNode(SummaryNode):
+class StackOverflowDocumentSummaryNode(LLMNode):
     _template = (
         "Summarize the Stackoverflow post. It's not exact post, the question and answers "
         "are summarized. Identify the problem and formulate solutions. "
@@ -165,9 +169,9 @@ class StackOverflowDocumentSummaryNode(SummaryNode):
 class StackOverflowDocumentSummarizer(Summarizer):
     def __init__(
         self,
-        question_summary_node: SummaryNode,
-        answer_summary_node: SummaryNode,
-        document_summary_node: SummaryNode,
+        question_summary_node: LLMNode,
+        answer_summary_node: LLMNode,
+        document_summary_node: LLMNode,
     ) -> None:
         self._question_summary_node = question_summary_node
         self._answer_summary_node = answer_summary_node
@@ -177,20 +181,20 @@ class StackOverflowDocumentSummarizer(Summarizer):
         self,
         document: StackOverflowDocument,
     ) -> str:
-        question_summary = await self._question_summary_node.async_summarize(
+        question_summary = await self._question_summary_node.ainvoke(
             document.question
         )
         answer_summarizer_inputs = [
             {"question": question_summary, "answer": answer}
             for answer in document.answers
         ]
-        answers_summary = await self._answer_summary_node.async_summarize_multiple(
+        answers_summary = await self._answer_summary_node.ainvoke_multiple(
             answer_summarizer_inputs
         )
         document_summarizer_inputs = {
             "question": question_summary,
             "answers": answers_summary,
         }
-        return await self._document_summary_node.async_summarize(
+        return await self._document_summary_node.ainvoke(
             document_summarizer_inputs
         )

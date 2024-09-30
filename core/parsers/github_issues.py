@@ -1,7 +1,11 @@
+import shutil
+from pathlib import Path
+
+import requests
 from bs4 import BeautifulSoup, NavigableString, Tag
-from markdownify import markdownify
 
 from core.data_structures import GithubIssueComment, GithubIssueDocument
+from core.utils_md import ignore_images_converter as md
 
 
 def parse_title(soup: BeautifulSoup) -> str:
@@ -18,7 +22,7 @@ def parse_comment_body(comment_div: Tag | NavigableString) -> str:
     for paragraph in comment_body_div.children:
         paragraph_str = str(paragraph)
         if not paragraph_str.isspace():
-            paragraph_md = markdownify(paragraph_str, heading_style="ATX")
+            paragraph_md = md(paragraph_str, heading_style="ATX")
             result.append(paragraph_md)
     return "".join(result)
 
@@ -29,8 +33,10 @@ def parse_author(comment_div: Tag | NavigableString) -> str:
 
 
 def parse_timestamp(comment_div: Tag | NavigableString) -> str:
-    timestamp_tag = comment_div.find("relative-time")
-    return timestamp_tag["datetime"] if timestamp_tag else "Unknown"
+    timestamp_tag = comment_div.find_all("relative-time")
+    if not timestamp_tag:
+        return "Unknown Time"
+    return timestamp_tag[-1]["datetime"]
 
 
 def parse_reactions(comment_div: Tag | NavigableString) -> dict[str, int]:
@@ -69,3 +75,30 @@ def parse_github_issue_page(html_file: str) -> GithubIssueDocument:
     return GithubIssueDocument(
         title=title, question=comments_data[0], answers=comments_data[1:]
     )
+
+
+if __name__ == "__main__":
+    urls = [
+        "https://github.com/mcfletch/pyopengl/issues/10",
+    ]
+    force_remove = True
+
+    output_dir = Path("parsers_output") / "github_issues"
+    if output_dir.exists():
+        if not force_remove:
+            raise FileExistsError("Output directory already exists")
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True)
+
+    for url in urls:
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise ValueError(f"Failed to fetch {url}")
+
+        document = parse_github_issue_page(response.text)
+        document_md = document.to_markdown()
+        document_name = url.replace("https://github.com/", "").replace("/", "_")
+        document_name = f"{document_name}.md"
+
+        with open(output_dir / document_name, "w") as f:
+            f.write(document_md)
