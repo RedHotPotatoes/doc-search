@@ -1,21 +1,24 @@
 import datetime
+import inspect
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from functools import partial
+from functools import partial, wraps
 from typing import Any
 
 import bson
 import hydra
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from jose.exceptions import ExpiredSignatureError, JWTClaimsError, JWTError
 from omegaconf import OmegaConf
 from starlette import status
 from starlette.middleware.sessions import SessionMiddleware
 
 from auth.auth import router as auth_router
+from auth.utils_auth import decode_token
 from core.conversation import (get_chat_history, get_conversation_runnable,
                                serialize_conversation)
 from core.db import AsyncMongoDB, init_mongo_db_instance
@@ -33,6 +36,7 @@ class GenerateConfig:
     documents: dict[str, list[dict[str, Any]]]
     yield_prompt: bool
     links: dict[str, list[str]]
+    user_id: str
 
 
 @dataclass
@@ -84,7 +88,7 @@ async def generate_request_handler(config: GenerateConfig):
     conversation = serialize_conversation([prompt, llm_response])
     curr_time = datetime.now(UTC)
     data = {
-        "user_id": None,
+        "user_id": config.user_id,
         "query_text": config.error_message,
         "links": config.links,
         "created_at": curr_time,
@@ -95,7 +99,7 @@ async def generate_request_handler(config: GenerateConfig):
     db_response = await db.insert(data)
     query_id = str(db_response.inserted_id)
 
-    if config.links["links_succeeded"]:
+    if "links_succeeded" in config.links and config.links["links_succeeded"]:
         links_str = ", ".join(
             [
                 f"[{index + 1}]({link})"
@@ -117,19 +121,78 @@ async def follow_up_request_handler(config: FollowUpConfig):
         yield parse_stream_chunk(chunk)
 
 
+async def authorize(request: Request):
+    token = request.headers.get("Authorization")
+    if not token or not token.startswith("Bearer"):
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"error": "Authorization token is missing."},
+        )
+    token = token.split(" ")[1]
+    try:
+        payload = decode_token(token)
+        user_id, expiry_time = payload["id"], payload["exp"]
+
+        if expiry_time < int(datetime.now(UTC).timestamp()):
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"error": "Authorization token has expired."},
+            )
+        if not bson.ObjectId.is_valid(user_id):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"error": "User ID is not valid."},
+            )
+        if await db.get_by_id(user_id, collection="users") is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content=f"User not found."
+            )
+    except (JWTError, ExpiredSignatureError, JWTClaimsError, KeyError) as e:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"error": f"Invalid authorization token. {e}"},
+        )
+    return user_id
+
+
+def authorize_decorator(func):
+    def is_first_arg_request(func):
+        signature = inspect.signature(func)
+        return next(iter(signature.parameters.values())).annotation == Request
+
+    if not is_first_arg_request(func):
+        raise ValueError("The first argument of the decorated function must be a Request object.")
+
+    @wraps(func)
+    async def wrapper(request: Request, *args, **kwargs):
+        auth_result = await authorize(request)
+        if isinstance(auth_result, Response):
+            return auth_result
+        return await func(request, *args, **kwargs)
+    return wrapper 
+    
+
 @app.get("/")
-async def read_root():
+@authorize_decorator
+async def read_root(request: Request):
     return {"Hello": "World"}
 
 
 @app.post("/generate_solution")
-async def generate_solution(error_message: str):
+async def generate_solution(request: Request, error_message: str):
+    auth_result = await authorize(request)
+    if isinstance(auth_result, Response):
+        return auth_result
+    user_id = auth_result
+
     documents, links = await document_retriever.retrieve_documents(error_message)
     config = GenerateConfig(
         error_message=error_message,
         documents=documents,
         yield_prompt=True,
         links=links,
+        user_id=user_id
     )
     return StreamingResponse(
         generate_request_handler(config),
@@ -138,7 +201,8 @@ async def generate_solution(error_message: str):
 
 
 @app.post("/follow_up")
-async def follow_up(user_text: str, query_id: str):
+@authorize_decorator
+async def follow_up(request: Request, user_text: str, query_id: str):
     if not bson.ObjectId.is_valid(query_id):
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -157,7 +221,8 @@ async def follow_up(user_text: str, query_id: str):
 
 
 @app.post("/add_reaction/{reaction}")
-async def add_reaction(reaction: str, query_id: str):
+@authorize_decorator
+async def add_reaction(request: Request, reaction: str, query_id: str):
     if reaction not in ["like", "dislike"]:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -197,7 +262,8 @@ async def add_reaction(reaction: str, query_id: str):
 
 
 @app.post("/remove_reaction/{reaction}")
-async def remove_reaction(reaction: str, query_id: str):
+@authorize_decorator
+async def remove_reaction(request: Request, reaction: str, query_id: str):
     if reaction not in ["like", "dislike"]:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -227,7 +293,8 @@ async def remove_reaction(reaction: str, query_id: str):
 
 
 @app.get("/reaction")
-async def get_reaction(query_id: str):
+@authorize_decorator
+async def get_reaction(request: Request, query_id: str):
     if not bson.ObjectId.is_valid(query_id):
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
