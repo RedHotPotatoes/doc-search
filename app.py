@@ -106,7 +106,7 @@ async def generate_request_handler(config: GenerateConfig):
                 for index, link in enumerate(config.links["links_succeeded"])
             ]
         )
-        yield ("\n\n" f" - **References:** ({links_str})")
+        yield ("\n\n" f"#### References: ({links_str})")
     yield ("\n\n" f" - **QUERY ID:** {query_id}")
 
 

@@ -1,0 +1,4 @@
+restricted_access: false
+
+white_list:
+ - example@gmail.com

@@ -28,9 +28,8 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 GOOGLE_REDIRECT_URI = f"{BACKEND_URL}/auth/callback/google"
 
-white_list_emails = OmegaConf.to_container(
-    OmegaConf.load("conf/whitelist_emails.yaml")
-)
+access = OmegaConf.load("conf/restricted_access.yaml")
+white_list_emails = OmegaConf.to_container(access.white_list)
 
 
 @router.get("/google")
@@ -50,7 +49,7 @@ async def auth_google(request: Request):
 
     user_info = user_response.get("userinfo")
     google_user = GoogleUser(**user_info)
-    if google_user.email not in white_list_emails:
+    if access.restricted_access and google_user.email not in white_list_emails:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="You are not authorized to access this resource",

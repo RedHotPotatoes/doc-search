@@ -37,10 +37,15 @@ def _stackexchange_test(url: str):
         https://{site name}.stackexchange.com/questions/{question id}/{question title}
         or
         https://stackoverflow.com/questions/{question id}
+        There are also other sites such as 
+        https://superuser.com/questions/{question id} or 
+        https://serverfault.com/questions/{question id} etc.
     """
     return re.match(r"^https://.+?\.stackexchange\.com/questions/.+?/.+?$", url) is not None or \
-           re.match(r"^https://stackoverflow\.com/questions/.+?$", url) is not None
-
+           re.match(r"^https://stackoverflow\.com/questions/.+?$", url) is not None or \
+           re.match(r"^https://superuser\.com/questions/.+?$", url) is not None or \
+           re.match(r"^https://serverfault\.com/questions/.+?$", url) is not None or \
+           re.match(r"^https://askubuntu\.com/questions/.+?$", url) is not None
 
 _parser_mapping = (
     (_stackexchange_test, parse_stackexchange_page),
