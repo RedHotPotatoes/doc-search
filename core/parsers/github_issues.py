@@ -1,3 +1,4 @@
+import json
 import shutil
 from pathlib import Path
 
@@ -53,25 +54,101 @@ def parse_reactions(comment_div: Tag | NavigableString) -> dict[str, int]:
     return reactions
 
 
+def parse_comment(comment_div: Tag) -> GithubIssueComment:
+    author = parse_author(comment_div)
+    timestamp = parse_timestamp(comment_div)
+    comment_text = parse_comment_body(comment_div)
+    reactions = parse_reactions(comment_div)
+    return GithubIssueComment(
+        author=author,
+        text=comment_text,
+        reactions=reactions,
+        timestamp=timestamp,
+    )
+
+
+def parse_github_issue_from_react_script(soup: BeautifulSoup) -> GithubIssueDocument:
+    def get_issue(data: dict):
+        if "preloadedQueries" not in data:
+            return
+        preloaded_queries = data["preloadedQueries"]
+        if len(preloaded_queries) == 0:
+            return
+        query = preloaded_queries[0]
+        if not (
+            (result := query.get("result", None))
+            and (res_data := result.get("data", None))
+            and (repository := res_data.get("repository", None))
+            and (issue := repository.get("issue", None))
+        ):
+            return
+        return issue
+
+    def get_reactions(issue: dict) -> dict[str, int]:
+        reactions = {}
+        for group in issue["reactionGroups"]:
+            count = group["reactors"]["totalCount"]
+            if count > 0:
+                reactions[group["content"]] = count
+        return reactions
+
+    react_div = soup.find("react-app")
+    if react_div is None:
+        raise ValueError("React div not found")
+
+    script_div = react_div.find("script")
+    if script_div is None:
+        raise ValueError("Script div not found")
+
+    data = json.loads(script_div.text)
+    if "payload" not in data:
+        raise ValueError("Payload not found in script data")
+
+    issue = get_issue(data["payload"])
+    if issue is None:
+        raise ValueError("Issue not found in payload data")
+
+    title = issue["title"]
+    question = GithubIssueComment(
+        author=issue["author"]["login"],
+        text=md(issue["bodyHTML"]),
+        reactions=get_reactions(issue),
+        timestamp=issue["createdAt"],
+    )
+    comments = issue.get("frontTimeline", {}).get("edges", None)
+    if comments is None:
+        raise ValueError("Comments not found in issue data")
+    comments = [
+        comment["node"]
+        for comment in comments
+        if comment["node"]["__typename"] == "IssueComment"
+    ]
+
+    answers = [
+        GithubIssueComment(
+            author=comment["author"]["login"],
+            text=md(comment["bodyHTML"]),
+            reactions=get_reactions(comment),
+            timestamp=comment["createdAt"],
+        )
+        for comment in comments
+    ]
+    return GithubIssueDocument(title=title, question=question, answers=answers)
+
+
 def parse_github_issue_page(html_file: str) -> GithubIssueDocument:
     soup = BeautifulSoup(html_file, "lxml")
-    comments_data = []
-    title = parse_title(soup)
-    comments_divs = soup.find_all("div", class_="timeline-comment")
-    for comment_div in comments_divs:
-        author = parse_author(comment_div)
-        timestamp = parse_timestamp(comment_div)
-        comment_text = parse_comment_body(comment_div)
-        reactions = parse_reactions(comment_div)
 
-        comments_data.append(
-            GithubIssueComment(
-                author=author,
-                text=comment_text,
-                reactions=reactions,
-                timestamp=timestamp,
-            )
-        )
+    # The issue pages from the Microsoft repository (and possibly others) 
+    # have a different structure than the ones from other repositories. 
+    # For the MS pages, the data is parsed from react-app div.
+    # The data from MS pages is usually incomplete for issues with many comments :(
+    comments_divs = soup.find_all("div", class_="timeline-comment")
+    if not comments_divs:
+        return parse_github_issue_from_react_script(soup)
+
+    title = parse_title(soup)
+    comments_data = [parse_comment(comment_div) for comment_div in comments_divs]
     return GithubIssueDocument(
         title=title, question=comments_data[0], answers=comments_data[1:]
     )
@@ -80,6 +157,8 @@ def parse_github_issue_page(html_file: str) -> GithubIssueDocument:
 if __name__ == "__main__":
     urls = [
         "https://github.com/mcfletch/pyopengl/issues/10",
+        "https://github.com/microsoft/vscode/issues/231399",
+        "https://github.com/microsoft/TypeScript/issues/50009"
     ]
     force_remove = True
 

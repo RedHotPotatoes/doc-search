@@ -12,7 +12,7 @@ def _discourse_test(url: str):
         The discourse page is of format 
         https://{discuss or forum}.{site name}/t/{post title}/{post id}
     """
-    return re.match(r"^https://(discuss|forum)\..+?/t/.+?/.+?$", url) is not None
+    return re.match(r"^https://(discuss|forum|community)\..+?/t/.+?/.+?$", url) is not None
 
 
 def _github_issue_test(url: str):
@@ -42,10 +42,8 @@ def _stackexchange_test(url: str):
         https://serverfault.com/questions/{question id} etc.
     """
     return re.match(r"^https://.+?\.stackexchange\.com/questions/.+?/.+?$", url) is not None or \
-           re.match(r"^https://stackoverflow\.com/questions/.+?$", url) is not None or \
-           re.match(r"^https://superuser\.com/questions/.+?$", url) is not None or \
-           re.match(r"^https://serverfault\.com/questions/.+?$", url) is not None or \
-           re.match(r"^https://askubuntu\.com/questions/.+?$", url) is not None
+           re.match(r"^https://(stackoverflow|superuser|serverfault|askubuntu)\.com/questions/.+?$", url) is not None
+
 
 _parser_mapping = (
     (_stackexchange_test, parse_stackexchange_page),
