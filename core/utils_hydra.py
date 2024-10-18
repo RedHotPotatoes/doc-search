@@ -22,6 +22,7 @@ def _resolve_credentials(key):
         "github_token": "GITHUB_TOKEN",
         "jina_api_key": "JINA_API_KEY",
         "openai_api_key": "OPENAI_API_KEY",
+        "anthropic_api_key": "ANTHROPIC_API_KEY",
         "groq_api_key": "GROQ_API_KEY",
         "google_search_api_key": "GOOGLE_SEARCH_API_KEY",
         "google_search_cse_id": "GOOGLE_SEARCH_CSE_ID",
